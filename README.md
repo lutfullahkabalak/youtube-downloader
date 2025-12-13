@@ -1,42 +1,91 @@
-# YouTube Downloader Service
+# 🎬 YouTube Downloader API
 
-YouTube videolarını indirmek için Go ile yazılmış REST API servisi. yt-dlp kullanarak video, ses ve altyazı indirme işlemlerini destekler.
+[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker)](https://www.docker.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## Özellikler
+A fast and simple REST API service for downloading YouTube videos, audio, and subtitles. Built with Go and powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 
-- 🎥 Video indirme (MP4)
-- 🎵 Ses indirme (MP3)
-- 📝 Altyazı indirme (SRT) - Çoklu video desteği
-- 📺 Kanal video listeleme
-- 🐳 Docker desteği
-- 🚀 RESTful API
-- 📁 Dosya olarak doğrudan indirme
+## ✨ Features
 
-## API Endpoints
+- 🎥 **Video Download** - Download videos in MP4 format
+- 🎵 **Audio Extract** - Extract audio as MP3
+- 📝 **Subtitle Download** - Download subtitles in SRT format (supports batch download)
+- 📺 **Channel Listing** - List all videos from a YouTube channel
+- 🐳 **Docker Ready** - Easy deployment with Docker Compose
+- ⚡ **Direct File Response** - Files are streamed directly to client
+- 🧹 **Auto Cleanup** - Downloaded files are automatically removed after serving
 
-### 1. Video İndirme
+## 🚀 Quick Start
+
+### Using Docker Compose (Recommended)
+
+```bash
+git clone https://github.com/yourusername/youtube-downloader.git
+cd youtube-downloader
+docker-compose up --build -d
+```
+
+The API will be available at `http://localhost:8080`
+
+### Using Docker
+
+```bash
+docker build -t youtube-downloader .
+docker run -p 8080:8080 youtube-downloader
+```
+
+### Local Development
+
+**Prerequisites:**
+- Go 1.21+
+- yt-dlp (`pip install yt-dlp`)
+- ffmpeg
+
+```bash
+go run main.go
+```
+
+## 📖 API Reference
+
+### Download Video
+
+Downloads a YouTube video as MP4.
+
 ```bash
 curl -X POST http://localhost:8080/download/video \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}' \
+  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}' \
   -o video.mp4
 ```
-**Dönen:** MP4 dosyası
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | Yes | YouTube video URL |
 
 ---
 
-### 2. Ses İndirme
+### Download Audio
+
+Extracts audio from a YouTube video as MP3.
+
 ```bash
 curl -X POST http://localhost:8080/download/audio \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}' \
+  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}' \
   -o audio.mp3
 ```
-**Dönen:** MP3 dosyası
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | Yes | YouTube video URL |
 
 ---
 
-### 3. Altyazı İndirme (Çoklu Video Desteği)
+### Download Subtitles
+
+Downloads subtitles for one or multiple videos. Supports batch download.
+
 ```bash
 curl -X POST http://localhost:8080/download/subtitle \
   -H "Content-Type: application/json" \
@@ -45,37 +94,44 @@ curl -X POST http://localhost:8080/download/subtitle \
       "https://www.youtube.com/watch?v=VIDEO_ID_1",
       "https://www.youtube.com/watch?v=VIDEO_ID_2"
     ],
-    "lang": "tr"
+    "lang": "en"
   }' \
   -o subtitles.zip
 ```
 
-**Parametreler:**
-- `urls` (zorunlu): YouTube video URL'leri (array)
-- `lang` (opsiyonel): Altyazı dili. Varsayılan: `"tr"`
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `urls` | string[] | Yes | Array of YouTube video URLs |
+| `lang` | string | No | Subtitle language code (default: `"tr"`) |
 
-**Dönen:** 
-- Tek video → SRT dosyası
-- Birden fazla video → ZIP dosyası
+**Response:**
+- Single video → `.srt` file
+- Multiple videos → `.zip` file containing all subtitles
+
+**Supported Languages:** `en`, `tr`, `de`, `fr`, `es`, `it`, `pt`, `ru`, `ja`, `ko`, `zh`, etc.
 
 ---
 
-### 4. Kanal Video Listeleme
+### List Channel Videos
+
+Lists all videos from a YouTube channel.
+
 ```bash
 curl -X POST http://localhost:8080/channel/list \
   -H "Content-Type: application/json" \
   -d '{"url": "https://www.youtube.com/@ChannelName", "limit": 20}'
 ```
 
-**Parametreler:**
-- `url` (zorunlu): YouTube kanal URL'si
-- `limit` (opsiyonel): Maksimum video sayısı. Varsayılan: `50`
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | Yes | YouTube channel URL |
+| `limit` | int | No | Maximum number of videos (default: `50`) |
 
-**Dönen:**
+**Response:**
 ```json
 {
   "success": true,
-  "channel": "Kanal Adı",
+  "channel": "Channel Name",
   "count": 20,
   "urls": [
     "https://www.youtube.com/watch?v=VIDEO_ID_1",
@@ -84,7 +140,7 @@ curl -X POST http://localhost:8080/channel/list \
   "videos": [
     {
       "id": "VIDEO_ID_1",
-      "title": "Video Başlığı",
+      "title": "Video Title",
       "url": "https://www.youtube.com/watch?v=VIDEO_ID_1",
       "duration": "10:25"
     }
@@ -92,148 +148,80 @@ curl -X POST http://localhost:8080/channel/list \
 }
 ```
 
-> 💡 **İpucu:** Dönen `urls` array'ini doğrudan `/download/subtitle` endpoint'ine gönderebilirsiniz.
+> 💡 **Tip:** You can directly use the returned `urls` array with the `/download/subtitle` endpoint.
 
 ---
 
-### 5. Health Check
+### Health Check
+
 ```bash
 curl http://localhost:8080/health
 ```
 
-## Docker ile Çalıştırma
+## 📋 Examples
 
-### Docker Compose ile (Önerilen)
-```bash
-docker-compose up --build -d
-```
+### Download Subtitles for All Channel Videos
 
-### Docker ile
-```bash
-# Image'ı build et
-docker build -t youtube-downloader .
-
-# Container'ı çalıştır
-docker run -p 8080:8080 -v $(pwd)/downloads:/app/downloads youtube-downloader
-```
-
-## Yerel Geliştirme
-
-### Gereksinimler
-- Go 1.21+
-- yt-dlp
-- ffmpeg
-
-### Kurulum
-```bash
-# yt-dlp'yi kur
-pip install yt-dlp
-
-# ffmpeg'i kur (macOS)
-brew install ffmpeg
-
-# Projeyi çalıştır
-go run main.go
-```
-
-## cURL Örnekleri
-
-### Video İndirme
-```bash
-curl -X POST http://localhost:8080/download/video \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}' \
-  -o video.mp4
-```
-
-### Ses İndirme
-```bash
-curl -X POST http://localhost:8080/download/audio \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}' \
-  -o audio.mp3
-```
-
-### Tek Video Altyazı İndirme
-```bash
-curl -X POST http://localhost:8080/download/subtitle \
-  -H "Content-Type: application/json" \
-  -d '{"urls": ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"], "lang": "tr"}' \
-  -o subtitle.srt
-```
-
-### Çoklu Video Altyazı İndirme
-```bash
-curl -X POST http://localhost:8080/download/subtitle \
-  -H "Content-Type: application/json" \
-  -d '{
-    "urls": [
-      "https://www.youtube.com/watch?v=VIDEO_ID_1",
-      "https://www.youtube.com/watch?v=VIDEO_ID_2",
-      "https://www.youtube.com/watch?v=VIDEO_ID_3"
-    ],
-    "lang": "en"
-  }' \
-  -o subtitles.zip
-```
-
-### Kanal Videolarını Listeleme
+**Step 1:** Get the list of videos from a channel
 ```bash
 curl -X POST http://localhost:8080/channel/list \
   -H "Content-Type: application/json" \
   -d '{"url": "https://www.youtube.com/@ChannelName", "limit": 10}'
 ```
 
-### Kanal Videolarının Altyazılarını İndirme (İki Adım)
-
-**Adım 1:** Kanal videolarını listele
-```bash
-curl -X POST http://localhost:8080/channel/list \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/@ChannelName", "limit": 5}'
-```
-
-**Adım 2:** Dönen `urls` array'ini kullanarak altyazıları indir
+**Step 2:** Use the returned `urls` array to download all subtitles
 ```bash
 curl -X POST http://localhost:8080/download/subtitle \
   -H "Content-Type: application/json" \
   -d '{
-    "urls": ["...dönen urls array buraya..."],
-    "lang": "tr"
+    "urls": ["<paste urls array here>"],
+    "lang": "en"
   }' \
   -o channel-subtitles.zip
 ```
 
-### Health Check
-```bash
-curl http://localhost:8080/health
-```
+### Using with Postman
 
-## Postman Kullanımı
+1. Create a new request (POST)
+2. Set the URL and headers
+3. Add the JSON body
+4. Click the arrow next to **Send**
+5. Select **"Send and Download"**
+6. The file will be downloaded automatically
 
-1. Request'i oluşturun (POST, URL, headers, body)
-2. **Send** butonunun yanındaki ok'a tıklayın
-3. **"Send and Download"** seçin
-4. Dosya otomatik olarak indirilir
+## ⚙️ Configuration
 
-## Port Yapılandırması
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `PORT` | `8080` | Server port |
 
-Varsayılan port: `8080`
-
-Port'u değiştirmek için `PORT` environment variable'ını kullanın:
 ```bash
 export PORT=3000
 go run main.go
 ```
 
-## Docker Image Detayları
+## 🐳 Docker Image Details
 
-Bu proje aşağıdaki bileşenleri içeren bir Docker image kullanır:
-- Python 3.11 (yt-dlp için)
-- yt-dlp (YouTube video indirme aracı)
-- ffmpeg (medya işleme)
-- Go 1.21 (uygulama runtime)
+The Docker image includes:
+- Python 3.11 (for yt-dlp)
+- yt-dlp (YouTube download tool)
+- ffmpeg (media processing)
+- Go 1.21 (application runtime)
 
-## Lisans
+## 🤝 Contributing
 
-MIT
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## ⚠️ Disclaimer
+
+This tool is for personal use only. Please respect YouTube's Terms of Service and copyright laws. The developers are not responsible for any misuse of this software.
