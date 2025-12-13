@@ -194,6 +194,47 @@ curl -X POST http://localhost:8080/channel/list \
 
 ---
 
+### List Playlist Videos
+
+Lists all videos from a YouTube playlist.
+
+```bash
+curl -X POST http://localhost:8080/playlist/list \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://www.youtube.com/playlist?list=PLAYLIST_ID", "limit": 20}'
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | Yes | YouTube playlist URL |
+| `limit` | int | No | Maximum number of videos (default: all videos) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "playlist_id": "PLxxxxxxxx",
+  "playlist_name": "Playlist Name",
+  "count": 20,
+  "urls": [
+    "https://www.youtube.com/watch?v=VIDEO_ID_1",
+    "https://www.youtube.com/watch?v=VIDEO_ID_2"
+  ],
+  "videos": [
+    {
+      "id": "VIDEO_ID_1",
+      "title": "Video Title",
+      "url": "https://www.youtube.com/watch?v=VIDEO_ID_1",
+      "duration": "10:25"
+    }
+  ]
+}
+```
+
+> 💡 **Tip:** You can directly use the returned `urls` array with download endpoints.
+
+---
+
 ### Get Video Comments
 
 Retrieves comments from a YouTube video.

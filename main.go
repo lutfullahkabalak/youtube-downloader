@@ -72,6 +72,20 @@ type ChannelResponse struct {
 	Videos  []VideoInfo `json:"videos"`
 }
 
+type PlaylistRequest struct {
+	URL   string `json:"url"`
+	Limit int    `json:"limit,omitempty"`
+}
+
+type PlaylistResponse struct {
+	Success      bool        `json:"success"`
+	PlaylistID   string      `json:"playlist_id"`
+	PlaylistName string      `json:"playlist_name"`
+	Count        int         `json:"count"`
+	URLs         []string    `json:"urls"`
+	Videos       []VideoInfo `json:"videos"`
+}
+
 type DownloadResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
@@ -112,6 +126,7 @@ func main() {
 	http.HandleFunc("/download/audio", downloadAudio)
 	http.HandleFunc("/download/subtitle", downloadSubtitle)
 	http.HandleFunc("/channel/list", listChannelVideos)
+	http.HandleFunc("/playlist/list", listPlaylistVideos)
 	http.HandleFunc("/video/comments", getVideoComments)
 	http.HandleFunc("/health", healthCheck)
 
@@ -632,6 +647,116 @@ func listChannelVideos(w http.ResponseWriter, r *http.Request) {
 		Count:   len(videos),
 		URLs:    urls,
 		Videos:  videos,
+	})
+}
+
+// listPlaylistVideos lists all videos from a YouTube playlist
+// @Summary List playlist videos
+// @Description Get a list of videos from a YouTube playlist
+// @Tags playlist
+// @Accept json
+// @Produce json
+// @Param request body PlaylistRequest true "Playlist URL and optional limit"
+// @Success 200 {object} PlaylistResponse "List of videos"
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 405 {string} string "Method not allowed"
+// @Failure 500 {object} ErrorResponse "Failed to fetch playlist"
+// @Router /playlist/list [post]
+func listPlaylistVideos(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req PlaylistRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, "Geçersiz JSON formatı", http.StatusBadRequest)
+		return
+	}
+
+	if req.URL == "" {
+		respondWithError(w, "Playlist URL'si gerekli", http.StatusBadRequest)
+		return
+	}
+
+	// Varsayılan limit (0 = tüm videolar)
+	limit := req.Limit
+
+	// yt-dlp ile playlist videolarını listele (JSON formatında)
+	args := []string{
+		"--flat-playlist",
+		"-J",
+	}
+	if limit > 0 {
+		args = append(args, "--playlist-end", fmt.Sprintf("%d", limit))
+	}
+	args = append(args, req.URL)
+
+	cmd := exec.Command("yt-dlp", args...)
+
+	output, err := cmd.Output()
+	if err != nil {
+		log.Printf("Playlist listesi alınamadı: %v", err)
+		respondWithError(w, "Playlist videoları alınamadı", http.StatusInternalServerError)
+		return
+	}
+
+	// JSON çıktısını parse et
+	var playlistData struct {
+		ID      string `json:"id"`
+		Title   string `json:"title"`
+		Entries []struct {
+			ID       string  `json:"id"`
+			Title    string  `json:"title"`
+			Duration float64 `json:"duration"`
+			URL      string  `json:"url"`
+		} `json:"entries"`
+	}
+
+	if err := json.Unmarshal(output, &playlistData); err != nil {
+		log.Printf("JSON parse hatası: %v", err)
+		respondWithError(w, "Playlist verisi işlenemedi", http.StatusInternalServerError)
+		return
+	}
+
+	// Video listesini oluştur
+	videos := make([]VideoInfo, 0, len(playlistData.Entries))
+	urls := make([]string, 0, len(playlistData.Entries))
+	for _, entry := range playlistData.Entries {
+		if entry.ID == "" {
+			continue
+		}
+
+		// Süreyi formatla
+		duration := ""
+		if entry.Duration > 0 {
+			minutes := int(entry.Duration) / 60
+			seconds := int(entry.Duration) % 60
+			duration = fmt.Sprintf("%d:%02d", minutes, seconds)
+		}
+
+		videoURL := entry.URL
+		if videoURL == "" {
+			videoURL = fmt.Sprintf("https://www.youtube.com/watch?v=%s", entry.ID)
+		}
+
+		urls = append(urls, videoURL)
+		videos = append(videos, VideoInfo{
+			ID:       entry.ID,
+			Title:    entry.Title,
+			URL:      videoURL,
+			Duration: duration,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(PlaylistResponse{
+		Success:      true,
+		PlaylistID:   playlistData.ID,
+		PlaylistName: playlistData.Title,
+		Count:        len(videos),
+		URLs:         urls,
+		Videos:       videos,
 	})
 }
 

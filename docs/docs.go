@@ -258,6 +258,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/playlist/list": {
+            "post": {
+                "description": "Get a list of videos from a YouTube playlist",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "playlist"
+                ],
+                "summary": "List playlist videos",
+                "parameters": [
+                    {
+                        "description": "Playlist URL and optional limit",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/main.PlaylistRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of videos",
+                        "schema": {
+                            "$ref": "#/definitions/main.PlaylistResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    },
+                    "405": {
+                        "description": "Method not allowed",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to fetch playlist",
+                        "schema": {
+                            "$ref": "#/definitions/main.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/video/comments": {
             "post": {
                 "description": "Retrieve comments from a YouTube video",
@@ -434,6 +486,46 @@ const docTemplate = `{
                 },
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "main.PlaylistRequest": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "main.PlaylistResponse": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "playlist_id": {
+                    "type": "string"
+                },
+                "playlist_name": {
+                    "type": "string"
+                },
+                "success": {
+                    "type": "boolean"
+                },
+                "urls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "videos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/main.VideoInfo"
+                    }
                 }
             }
         },

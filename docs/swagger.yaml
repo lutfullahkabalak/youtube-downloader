@@ -81,6 +81,32 @@ definitions:
       success:
         type: boolean
     type: object
+  main.PlaylistRequest:
+    properties:
+      limit:
+        type: integer
+      url:
+        type: string
+    type: object
+  main.PlaylistResponse:
+    properties:
+      count:
+        type: integer
+      playlist_id:
+        type: string
+      playlist_name:
+        type: string
+      success:
+        type: boolean
+      urls:
+        items:
+          type: string
+        type: array
+      videos:
+        items:
+          $ref: '#/definitions/main.VideoInfo'
+        type: array
+    type: object
   main.SubtitleDownloadRequest:
     properties:
       lang:
@@ -271,6 +297,40 @@ paths:
       summary: Health check
       tags:
       - system
+  /playlist/list:
+    post:
+      consumes:
+      - application/json
+      description: Get a list of videos from a YouTube playlist
+      parameters:
+      - description: Playlist URL and optional limit
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.PlaylistRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of videos
+          schema:
+            $ref: '#/definitions/main.PlaylistResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Failed to fetch playlist
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: List playlist videos
+      tags:
+      - playlist
   /video/comments:
     post:
       consumes:
