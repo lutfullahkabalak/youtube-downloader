@@ -17,19 +17,25 @@ RUN wget https://go.dev/dl/go1.21.5.linux-amd64.tar.gz \
     && rm go1.21.5.linux-amd64.tar.gz
 
 # Go PATH'ini ayarla
-ENV PATH="/usr/local/go/bin:${PATH}"
+ENV PATH="/usr/local/go/bin:/root/go/bin:${PATH}"
+
+# Swag CLI'yi kur
+RUN go install github.com/swaggo/swag/cmd/swag@latest
 
 # Çalışma dizinini ayarla
 WORKDIR /app
 
 # Go mod dosyasını kopyala
-COPY go.mod ./
+COPY go.mod go.sum ./
 
 # Bağımlılıkları indir
 RUN go mod download
 
 # Kaynak kodları kopyala
 COPY . .
+
+# Swagger dokümanlarını oluştur
+RUN swag init
 
 # Uygulamayı derle
 RUN go build -o youtube-downloader .

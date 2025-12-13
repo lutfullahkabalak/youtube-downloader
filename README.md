@@ -46,7 +46,17 @@ docker run -p 8080:8080 youtube-downloader
 go run main.go
 ```
 
-## 📖 API Reference
+## � Swagger Documentation
+
+Interactive API documentation is available at:
+
+```
+http://localhost:8080/swagger/index.html
+```
+
+![Swagger UI](https://img.shields.io/badge/Swagger-UI-85EA2D?style=flat&logo=swagger)
+
+## �📖 API Reference
 
 ### Download Video
 

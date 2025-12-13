@@ -12,6 +12,10 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	_ "youtube-downloader/docs"
+
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 type DownloadRequest struct {
@@ -54,6 +58,20 @@ type ErrorResponse struct {
 	Message string `json:"message"`
 }
 
+// @title YouTube Downloader API
+// @version 1.0
+// @description A REST API for downloading YouTube videos, audio, and subtitles
+// @termsOfService http://swagger.io/terms/
+
+// @contact.name API Support
+// @contact.url https://github.com/yourusername/youtube-downloader
+
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+
+// @host localhost:8080
+// @BasePath /
+// @schemes http https
 func main() {
 	// Downloads klasörünü oluştur
 	downloadsDir := "./downloads"
@@ -71,6 +89,9 @@ func main() {
 	http.HandleFunc("/channel/list", listChannelVideos)
 	http.HandleFunc("/health", healthCheck)
 
+	// Swagger UI
+	http.HandleFunc("/swagger/", httpSwagger.WrapHandler)
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -80,6 +101,18 @@ func main() {
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
 
+// downloadVideo downloads a YouTube video as MP4
+// @Summary Download video
+// @Description Download a YouTube video in MP4 format
+// @Tags download
+// @Accept json
+// @Produce octet-stream
+// @Param request body DownloadRequest true "Video URL"
+// @Success 200 {file} binary "MP4 video file"
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 405 {string} string "Method not allowed"
+// @Failure 500 {object} ErrorResponse "Download failed"
+// @Router /download/video [post]
 func downloadVideo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -138,6 +171,18 @@ func downloadVideo(w http.ResponseWriter, r *http.Request) {
 	sendFile(w, mp4Path, "video/mp4", filepath.Base(mp4Path))
 }
 
+// downloadAudio downloads a YouTube video's audio as MP3
+// @Summary Download audio
+// @Description Download audio from a YouTube video in MP3 format
+// @Tags download
+// @Accept json
+// @Produce octet-stream
+// @Param request body DownloadRequest true "Video URL"
+// @Success 200 {file} binary "MP3 audio file"
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 405 {string} string "Method not allowed"
+// @Failure 500 {object} ErrorResponse "Download failed"
+// @Router /download/audio [post]
 func downloadAudio(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -186,6 +231,19 @@ func downloadAudio(w http.ResponseWriter, r *http.Request) {
 	sendFile(w, mp3Path, "audio/mpeg", filepath.Base(mp3Path))
 }
 
+// downloadSubtitle downloads subtitles for YouTube videos
+// @Summary Download subtitles
+// @Description Download subtitles for one or more YouTube videos. Returns SRT file for single URL, ZIP for multiple URLs.
+// @Tags download
+// @Accept json
+// @Produce octet-stream
+// @Param request body SubtitleDownloadRequest true "Video URLs and language"
+// @Success 200 {file} binary "SRT subtitle file or ZIP archive"
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 404 {object} ErrorResponse "No subtitles found"
+// @Failure 405 {string} string "Method not allowed"
+// @Failure 500 {object} ErrorResponse "Download failed"
+// @Router /download/subtitle [post]
 func downloadSubtitle(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -269,6 +327,13 @@ func downloadSubtitle(w http.ResponseWriter, r *http.Request) {
 	sendFile(w, zipPath, "application/zip", filepath.Base(zipPath))
 }
 
+// healthCheck returns the health status of the service
+// @Summary Health check
+// @Description Check if the service is running
+// @Tags system
+// @Produce json
+// @Success 200 {object} map[string]interface{} "Service health status"
+// @Router /health [get]
 func healthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -389,6 +454,17 @@ func addFileToZip(zw *zip.Writer, path string) error {
 }
 
 // listChannelVideos lists all videos from a YouTube channel
+// @Summary List channel videos
+// @Description Get a list of videos from a YouTube channel
+// @Tags channel
+// @Accept json
+// @Produce json
+// @Param request body ChannelRequest true "Channel URL and optional limit"
+// @Success 200 {object} ChannelResponse "List of videos"
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 405 {string} string "Method not allowed"
+// @Failure 500 {object} ErrorResponse "Failed to fetch channel"
+// @Router /channel/list [post]
 func listChannelVideos(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

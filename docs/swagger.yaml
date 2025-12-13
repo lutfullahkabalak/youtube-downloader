@@ -1,0 +1,230 @@
+basePath: /
+definitions:
+  main.ChannelRequest:
+    properties:
+      limit:
+        type: integer
+      url:
+        type: string
+    type: object
+  main.ChannelResponse:
+    properties:
+      channel:
+        type: string
+      count:
+        type: integer
+      success:
+        type: boolean
+      urls:
+        items:
+          type: string
+        type: array
+      videos:
+        items:
+          $ref: '#/definitions/main.VideoInfo'
+        type: array
+    type: object
+  main.DownloadRequest:
+    properties:
+      url:
+        type: string
+    type: object
+  main.ErrorResponse:
+    properties:
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  main.SubtitleDownloadRequest:
+    properties:
+      lang:
+        type: string
+      urls:
+        items:
+          type: string
+        type: array
+    type: object
+  main.VideoInfo:
+    properties:
+      duration:
+        type: string
+      id:
+        type: string
+      title:
+        type: string
+      url:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    name: API Support
+    url: https://github.com/yourusername/youtube-downloader
+  description: A REST API for downloading YouTube videos, audio, and subtitles
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: http://swagger.io/terms/
+  title: YouTube Downloader API
+  version: "1.0"
+paths:
+  /channel/list:
+    post:
+      consumes:
+      - application/json
+      description: Get a list of videos from a YouTube channel
+      parameters:
+      - description: Channel URL and optional limit
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.ChannelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of videos
+          schema:
+            $ref: '#/definitions/main.ChannelResponse'
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Failed to fetch channel
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: List channel videos
+      tags:
+      - channel
+  /download/audio:
+    post:
+      consumes:
+      - application/json
+      description: Download audio from a YouTube video in MP3 format
+      parameters:
+      - description: Video URL
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.DownloadRequest'
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: MP3 audio file
+          schema:
+            type: file
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Download failed
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Download audio
+      tags:
+      - download
+  /download/subtitle:
+    post:
+      consumes:
+      - application/json
+      description: Download subtitles for one or more YouTube videos. Returns SRT
+        file for single URL, ZIP for multiple URLs.
+      parameters:
+      - description: Video URLs and language
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.SubtitleDownloadRequest'
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: SRT subtitle file or ZIP archive
+          schema:
+            type: file
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "404":
+          description: No subtitles found
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Download failed
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Download subtitles
+      tags:
+      - download
+  /download/video:
+    post:
+      consumes:
+      - application/json
+      description: Download a YouTube video in MP4 format
+      parameters:
+      - description: Video URL
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.DownloadRequest'
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: MP4 video file
+          schema:
+            type: file
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Download failed
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Download video
+      tags:
+      - download
+  /health:
+    get:
+      description: Check if the service is running
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Service health status
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Health check
+      tags:
+      - system
+schemes:
+- http
+- https
+swagger: "2.0"
