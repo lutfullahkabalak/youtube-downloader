@@ -15,43 +15,39 @@ YouTube videolarını indirmek için Go ile yazılmış REST API servisi. yt-dlp
 ## API Endpoints
 
 ### 1. Video İndirme
-```http
-POST /download/video
-Content-Type: application/json
-
-{
-  "url": "https://www.youtube.com/watch?v=VIDEO_ID"
-}
+```bash
+curl -X POST http://localhost:8080/download/video \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}' \
+  -o video.mp4
 ```
 **Dönen:** MP4 dosyası
 
 ---
 
 ### 2. Ses İndirme
-```http
-POST /download/audio
-Content-Type: application/json
-
-{
-  "url": "https://www.youtube.com/watch?v=VIDEO_ID"
-}
+```bash
+curl -X POST http://localhost:8080/download/audio \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID"}' \
+  -o audio.mp3
 ```
 **Dönen:** MP3 dosyası
 
 ---
 
 ### 3. Altyazı İndirme (Çoklu Video Desteği)
-```http
-POST /download/subtitle
-Content-Type: application/json
-
-{
-  "urls": [
-    "https://www.youtube.com/watch?v=VIDEO_ID_1",
-    "https://www.youtube.com/watch?v=VIDEO_ID_2"
-  ],
-  "lang": "tr"
-}
+```bash
+curl -X POST http://localhost:8080/download/subtitle \
+  -H "Content-Type: application/json" \
+  -d '{
+    "urls": [
+      "https://www.youtube.com/watch?v=VIDEO_ID_1",
+      "https://www.youtube.com/watch?v=VIDEO_ID_2"
+    ],
+    "lang": "tr"
+  }' \
+  -o subtitles.zip
 ```
 
 **Parametreler:**
@@ -65,14 +61,10 @@ Content-Type: application/json
 ---
 
 ### 4. Kanal Video Listeleme
-```http
-POST /channel/list
-Content-Type: application/json
-
-{
-  "url": "https://www.youtube.com/@ChannelName",
-  "limit": 20
-}
+```bash
+curl -X POST http://localhost:8080/channel/list \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://www.youtube.com/@ChannelName", "limit": 20}'
 ```
 
 **Parametreler:**
@@ -105,8 +97,8 @@ Content-Type: application/json
 ---
 
 ### 5. Health Check
-```http
-GET /health
+```bash
+curl http://localhost:8080/health
 ```
 
 ## Docker ile Çalıştırma
