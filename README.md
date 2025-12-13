@@ -2,6 +2,7 @@
 
 [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker)](https://www.docker.com/)
+[![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-Available-blue?style=flat&logo=github)](https://github.com/users/yourusername/packages/container/package/youtube-downloader)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 A fast and simple REST API service for downloading YouTube videos, audio, and subtitles. Built with Go and powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp).
@@ -12,11 +13,20 @@ A fast and simple REST API service for downloading YouTube videos, audio, and su
 - 🎵 **Audio Extract** - Extract audio as MP3
 - 📝 **Subtitle Download** - Download subtitles in SRT format (supports batch download)
 - 📺 **Channel Listing** - List all videos from a YouTube channel
+- 📋 **Playlist Listing** - List all videos from a YouTube playlist
+- 💬 **Comments** - Retrieve video comments
 - 🐳 **Docker Ready** - Easy deployment with Docker Compose
 - ⚡ **Direct File Response** - Files are streamed directly to client
 - 🧹 **Auto Cleanup** - Downloaded files are automatically removed after serving
 
 ## 🚀 Quick Start
+
+### Using GitHub Container Registry (Easiest)
+
+```bash
+docker pull ghcr.io/yourusername/youtube-downloader:latest
+docker run -p 8080:8080 ghcr.io/yourusername/youtube-downloader:latest
+```
 
 ### Using Docker Compose (Recommended)
 
