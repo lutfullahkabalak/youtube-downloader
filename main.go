@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type DownloadRequest struct {
@@ -59,6 +60,9 @@ func main() {
 	if err := os.MkdirAll(downloadsDir, 0755); err != nil {
 		log.Fatal("Downloads klasörü oluşturulamadı:", err)
 	}
+
+	// Periyodik temizlik başlat (her 30 dakikada bir)
+	go startPeriodicCleanup(downloadsDir, 30*time.Minute, 1*time.Hour)
 
 	// HTTP route'ları
 	http.HandleFunc("/download/video", downloadVideo)
@@ -256,6 +260,12 @@ func downloadSubtitle(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, "Altyazılar ziplenemedi", http.StatusInternalServerError)
 		return
 	}
+
+	// ZIP oluşturulduktan sonra orijinal dosyaları sil
+	for _, file := range allSubtitleFiles {
+		os.Remove(file)
+	}
+
 	sendFile(w, zipPath, "application/zip", filepath.Base(zipPath))
 }
 
@@ -473,4 +483,56 @@ func listChannelVideos(w http.ResponseWriter, r *http.Request) {
 		URLs:    urls,
 		Videos:  videos,
 	})
+}
+
+// startPeriodicCleanup starts a background goroutine that periodically cleans up old files
+func startPeriodicCleanup(dir string, interval time.Duration, maxAge time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	log.Printf("Periodic cleanup started: checking every %v, removing files older than %v", interval, maxAge)
+
+	// İlk başlatmada bir kez çalıştır
+	cleanupOldFiles(dir, maxAge)
+
+	for range ticker.C {
+		cleanupOldFiles(dir, maxAge)
+	}
+}
+
+// cleanupOldFiles removes files older than maxAge from the specified directory
+func cleanupOldFiles(dir string, maxAge time.Duration) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		log.Printf("Cleanup: directory read error: %v", err)
+		return
+	}
+
+	now := time.Now()
+	removedCount := 0
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		filePath := filepath.Join(dir, entry.Name())
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		// Dosya maxAge'den eski mi kontrol et
+		if now.Sub(info.ModTime()) > maxAge {
+			if err := os.Remove(filePath); err != nil {
+				log.Printf("Cleanup: failed to remove %s: %v", filePath, err)
+			} else {
+				removedCount++
+			}
+		}
+	}
+
+	if removedCount > 0 {
+		log.Printf("Cleanup: removed %d old file(s) from %s", removedCount, dir)
+	}
 }
