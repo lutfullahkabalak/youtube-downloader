@@ -4,11 +4,13 @@ YouTube videolarını indirmek için Go ile yazılmış REST API servisi. yt-dlp
 
 ## Özellikler
 
-- 🎥 Video indirme
-- 🎵 Ses indirme (MP3 formatında)
-- 📝 Altyazı indirme (Türkçe ve İngilizce)
+- 🎥 Video indirme (MP4)
+- 🎵 Ses indirme (MP3)
+- 📝 Altyazı indirme (SRT) - Çoklu video desteği
+- 📺 Kanal video listeleme
 - 🐳 Docker desteği
 - 🚀 RESTful API
+- 📁 Dosya olarak doğrudan indirme
 
 ## API Endpoints
 
@@ -21,6 +23,9 @@ Content-Type: application/json
   "url": "https://www.youtube.com/watch?v=VIDEO_ID"
 }
 ```
+**Dönen:** MP4 dosyası
+
+---
 
 ### 2. Ses İndirme
 ```http
@@ -31,25 +36,75 @@ Content-Type: application/json
   "url": "https://www.youtube.com/watch?v=VIDEO_ID"
 }
 ```
+**Dönen:** MP3 dosyası
 
-### 3. Altyazı İndirme
+---
+
+### 3. Altyazı İndirme (Çoklu Video Desteği)
 ```http
 POST /download/subtitle
 Content-Type: application/json
 
 {
-  "url": "https://www.youtube.com/watch?v=VIDEO_ID",
-  "langs": ["tr", "en", "de", "fr"]
+  "urls": [
+    "https://www.youtube.com/watch?v=VIDEO_ID_1",
+    "https://www.youtube.com/watch?v=VIDEO_ID_2"
+  ],
+  "lang": "tr"
 }
 ```
 
 **Parametreler:**
-- `url` (zorunlu): YouTube video URL'si
-- `langs` (opsiyonel): İndirilecek altyazı dilleri. Varsayılan: `["tr", "en"]`
+- `urls` (zorunlu): YouTube video URL'leri (array)
+- `lang` (opsiyonel): Altyazı dili. Varsayılan: `"tr"`
 
-**Desteklenen dil kodları:** `tr`, `en`, `de`, `fr`, `es`, `it`, `pt`, `ru`, `ja`, `ko`, `zh`, vb.
+**Dönen:** 
+- Tek video → SRT dosyası
+- Birden fazla video → ZIP dosyası
 
-### 4. Health Check
+---
+
+### 4. Kanal Video Listeleme
+```http
+POST /channel/list
+Content-Type: application/json
+
+{
+  "url": "https://www.youtube.com/@ChannelName",
+  "limit": 20
+}
+```
+
+**Parametreler:**
+- `url` (zorunlu): YouTube kanal URL'si
+- `limit` (opsiyonel): Maksimum video sayısı. Varsayılan: `50`
+
+**Dönen:**
+```json
+{
+  "success": true,
+  "channel": "Kanal Adı",
+  "count": 20,
+  "urls": [
+    "https://www.youtube.com/watch?v=VIDEO_ID_1",
+    "https://www.youtube.com/watch?v=VIDEO_ID_2"
+  ],
+  "videos": [
+    {
+      "id": "VIDEO_ID_1",
+      "title": "Video Başlığı",
+      "url": "https://www.youtube.com/watch?v=VIDEO_ID_1",
+      "duration": "10:25"
+    }
+  ]
+}
+```
+
+> 💡 **İpucu:** Dönen `urls` array'ini doğrudan `/download/subtitle` endpoint'ine gönderebilirsiniz.
+
+---
+
+### 5. Health Check
 ```http
 GET /health
 ```
@@ -58,7 +113,7 @@ GET /health
 
 ### Docker Compose ile (Önerilen)
 ```bash
-docker-compose up --build
+docker-compose up --build -d
 ```
 
 ### Docker ile
@@ -89,60 +144,85 @@ brew install ffmpeg
 go run main.go
 ```
 
-## Kullanım Örnekleri
+## cURL Örnekleri
 
-### cURL ile Video İndirme
+### Video İndirme
 ```bash
 curl -X POST http://localhost:8080/download/video \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
+  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}' \
+  -o video.mp4
 ```
 
-### cURL ile Ses İndirme
+### Ses İndirme
 ```bash
 curl -X POST http://localhost:8080/download/audio \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
+  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}' \
+  -o audio.mp3
 ```
 
-### cURL ile Altyazı İndirme
+### Tek Video Altyazı İndirme
 ```bash
-# Varsayılan diller (tr, en) ile
 curl -X POST http://localhost:8080/download/subtitle \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
+  -d '{"urls": ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"], "lang": "tr"}' \
+  -o subtitle.srt
+```
 
-# Özel diller ile
+### Çoklu Video Altyazı İndirme
+```bash
 curl -X POST http://localhost:8080/download/subtitle \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "langs": ["tr", "en", "de", "fr"]}'
+  -d '{
+    "urls": [
+      "https://www.youtube.com/watch?v=VIDEO_ID_1",
+      "https://www.youtube.com/watch?v=VIDEO_ID_2",
+      "https://www.youtube.com/watch?v=VIDEO_ID_3"
+    ],
+    "lang": "en"
+  }' \
+  -o subtitles.zip
 ```
 
-## Yanıt Formatı
-
-### Başarılı Yanıt
-```json
-{
-  "success": true,
-  "message": "Video başarıyla indirildi",
-  "file": "video_title.mp4"
-}
+### Kanal Videolarını Listeleme
+```bash
+curl -X POST http://localhost:8080/channel/list \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://www.youtube.com/@ChannelName", "limit": 10}'
 ```
 
-### Hata Yanıtı
-```json
-{
-  "success": false,
-  "message": "Hata mesajı"
-}
+### Kanal Videolarının Altyazılarını İndirme (İki Adım)
+
+**Adım 1:** Kanal videolarını listele
+```bash
+curl -X POST http://localhost:8080/channel/list \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://www.youtube.com/@ChannelName", "limit": 5}'
 ```
 
-## İndirilen Dosyalar
+**Adım 2:** Dönen `urls` array'ini kullanarak altyazıları indir
+```bash
+curl -X POST http://localhost:8080/download/subtitle \
+  -H "Content-Type: application/json" \
+  -d '{
+    "urls": ["...dönen urls array buraya..."],
+    "lang": "tr"
+  }' \
+  -o channel-subtitles.zip
+```
 
-Tüm indirilen dosyalar `./downloads` klasöründe saklanır:
-- Video dosyaları: `video_title.mp4`
-- Ses dosyaları: `video_title.mp3`
-- Altyazı dosyaları: `video_title.tr.vtt`, `video_title.en.vtt`
+### Health Check
+```bash
+curl http://localhost:8080/health
+```
+
+## Postman Kullanımı
+
+1. Request'i oluşturun (POST, URL, headers, body)
+2. **Send** butonunun yanındaki ok'a tıklayın
+3. **"Send and Download"** seçin
+4. Dosya otomatik olarak indirilir
 
 ## Port Yapılandırması
 
