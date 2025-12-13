@@ -162,6 +162,48 @@ curl -X POST http://localhost:8080/channel/list \
 
 ---
 
+### Get Video Comments
+
+Retrieves comments from a YouTube video.
+
+```bash
+curl -X POST http://localhost:8080/video/comments \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID", "limit": 50}'
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | Yes | YouTube video URL |
+| `limit` | int | No | Maximum number of comments (default: `100`) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "video_id": "dQw4w9WgXcQ",
+  "video_title": "Video Title",
+  "comment_count": 50,
+  "comments": [
+    {
+      "id": "comment_id",
+      "author": "@Username",
+      "author_id": "channel_id",
+      "text": "Comment text here",
+      "like_count": 1500,
+      "is_favorited": false,
+      "author_is_uploader": false,
+      "parent": "root",
+      "timestamp": 1699999999
+    }
+  ]
+}
+```
+
+> 💡 **Note:** Comments with `parent: "root"` are top-level comments. Replies have their parent comment's ID.
+
+---
+
 ### Health Check
 
 ```bash

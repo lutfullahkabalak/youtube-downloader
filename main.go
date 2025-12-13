@@ -32,6 +32,31 @@ type ChannelRequest struct {
 	Limit int    `json:"limit,omitempty"`
 }
 
+type CommentRequest struct {
+	URL   string `json:"url"`
+	Limit int    `json:"limit,omitempty"`
+}
+
+type Comment struct {
+	ID               string `json:"id"`
+	Author           string `json:"author"`
+	AuthorID         string `json:"author_id"`
+	Text             string `json:"text"`
+	LikeCount        int    `json:"like_count"`
+	IsFavorited      bool   `json:"is_favorited"`
+	AuthorIsUploader bool   `json:"author_is_uploader"`
+	Parent           string `json:"parent,omitempty"`
+	Timestamp        int64  `json:"timestamp,omitempty"`
+}
+
+type CommentResponse struct {
+	Success      bool      `json:"success"`
+	VideoID      string    `json:"video_id"`
+	VideoTitle   string    `json:"video_title"`
+	CommentCount int       `json:"comment_count"`
+	Comments     []Comment `json:"comments"`
+}
+
 type VideoInfo struct {
 	ID       string `json:"id"`
 	Title    string `json:"title"`
@@ -87,6 +112,7 @@ func main() {
 	http.HandleFunc("/download/audio", downloadAudio)
 	http.HandleFunc("/download/subtitle", downloadSubtitle)
 	http.HandleFunc("/channel/list", listChannelVideos)
+	http.HandleFunc("/video/comments", getVideoComments)
 	http.HandleFunc("/health", healthCheck)
 
 	// Swagger UI
@@ -558,6 +584,107 @@ func listChannelVideos(w http.ResponseWriter, r *http.Request) {
 		Count:   len(videos),
 		URLs:    urls,
 		Videos:  videos,
+	})
+}
+
+// getVideoComments retrieves comments from a YouTube video
+// @Summary Get video comments
+// @Description Retrieve comments from a YouTube video
+// @Tags video
+// @Accept json
+// @Produce json
+// @Param request body CommentRequest true "Video URL and optional limit"
+// @Success 200 {object} CommentResponse "List of comments"
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 405 {string} string "Method not allowed"
+// @Failure 500 {object} ErrorResponse "Failed to fetch comments"
+// @Router /video/comments [post]
+func getVideoComments(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req CommentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, "Geçersiz JSON formatı", http.StatusBadRequest)
+		return
+	}
+
+	if req.URL == "" {
+		respondWithError(w, "Video URL'si gerekli", http.StatusBadRequest)
+		return
+	}
+
+	// Varsayılan limit
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 100 // Varsayılan olarak 100 yorum
+	}
+
+	// yt-dlp ile yorumları çek (JSON formatında)
+	cmd := exec.Command(
+		"yt-dlp",
+		"--skip-download",
+		"--write-comments",
+		"--extractor-args", fmt.Sprintf("youtube:max_comments=%d,all,all,%d", limit, limit),
+		"-J",
+		req.URL,
+	)
+
+	output, err := cmd.Output()
+	if err != nil {
+		log.Printf("Yorumlar alınamadı: %v", err)
+		respondWithError(w, "Video yorumları alınamadı", http.StatusInternalServerError)
+		return
+	}
+
+	// JSON çıktısını parse et
+	var videoData struct {
+		ID       string `json:"id"`
+		Title    string `json:"title"`
+		Comments []struct {
+			ID               string `json:"id"`
+			Author           string `json:"author"`
+			AuthorID         string `json:"author_id"`
+			Text             string `json:"text"`
+			LikeCount        int    `json:"like_count"`
+			IsFavorited      bool   `json:"is_favorited"`
+			AuthorIsUploader bool   `json:"author_is_uploader"`
+			Parent           string `json:"parent"`
+			Timestamp        int64  `json:"timestamp"`
+		} `json:"comments"`
+	}
+
+	if err := json.Unmarshal(output, &videoData); err != nil {
+		log.Printf("JSON parse hatası: %v", err)
+		respondWithError(w, "Yorum verisi işlenemedi", http.StatusInternalServerError)
+		return
+	}
+
+	// Yorumları dönüştür
+	comments := make([]Comment, 0, len(videoData.Comments))
+	for _, c := range videoData.Comments {
+		comments = append(comments, Comment{
+			ID:               c.ID,
+			Author:           c.Author,
+			AuthorID:         c.AuthorID,
+			Text:             c.Text,
+			LikeCount:        c.LikeCount,
+			IsFavorited:      c.IsFavorited,
+			AuthorIsUploader: c.AuthorIsUploader,
+			Parent:           c.Parent,
+			Timestamp:        c.Timestamp,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(CommentResponse{
+		Success:      true,
+		VideoID:      videoData.ID,
+		VideoTitle:   videoData.Title,
+		CommentCount: len(comments),
+		Comments:     comments,
 	})
 }
 
