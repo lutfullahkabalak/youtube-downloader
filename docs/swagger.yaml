@@ -69,8 +69,10 @@ definitions:
     type: object
   main.DownloadRequest:
     properties:
-      url:
-        type: string
+      urls:
+        items:
+          type: string
+        type: array
     type: object
   main.ErrorResponse:
     properties:
@@ -150,9 +152,10 @@ paths:
     post:
       consumes:
       - application/json
-      description: Download audio from a YouTube video in MP3 format
+      description: Download audio from one or more YouTube videos in MP3 format. Returns
+        single file for one URL, ZIP for multiple URLs.
       parameters:
-      - description: Video URL
+      - description: Video URLs
         in: body
         name: request
         required: true
@@ -162,7 +165,7 @@ paths:
       - application/octet-stream
       responses:
         "200":
-          description: MP3 audio file
+          description: MP3 audio file or ZIP archive
           schema:
             type: file
         "400":
@@ -223,9 +226,10 @@ paths:
     post:
       consumes:
       - application/json
-      description: Download a YouTube video in MP4 format
+      description: Download one or more YouTube videos in MP4 format. Returns single
+        file for one URL, ZIP for multiple URLs.
       parameters:
-      - description: Video URL
+      - description: Video URLs
         in: body
         name: request
         required: true
@@ -235,7 +239,7 @@ paths:
       - application/octet-stream
       responses:
         "200":
-          description: MP4 video file
+          description: MP4 video file or ZIP archive
           schema:
             type: file
         "400":

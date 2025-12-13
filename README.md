@@ -56,39 +56,71 @@ http://localhost:8080/swagger/index.html
 
 ![Swagger UI](https://img.shields.io/badge/Swagger-UI-85EA2D?style=flat&logo=swagger)
 
-## �📖 API Reference
+## 📖 API Reference
 
 ### Download Video
 
-Downloads a YouTube video as MP4.
+Downloads one or more YouTube videos as MP4. Supports batch download.
 
 ```bash
+# Single video
 curl -X POST http://localhost:8080/download/video \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}' \
+  -d '{"urls": ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]}' \
   -o video.mp4
+
+# Multiple videos
+curl -X POST http://localhost:8080/download/video \
+  -H "Content-Type: application/json" \
+  -d '{
+    "urls": [
+      "https://www.youtube.com/watch?v=VIDEO_ID_1",
+      "https://www.youtube.com/watch?v=VIDEO_ID_2"
+    ]
+  }' \
+  -o videos.zip
 ```
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `url` | string | Yes | YouTube video URL |
+| `urls` | string[] | Yes | Array of YouTube video URLs |
+
+**Response:**
+- Single video → `.mp4` file
+- Multiple videos → `.zip` file containing all videos
 
 ---
 
 ### Download Audio
 
-Extracts audio from a YouTube video as MP3.
+Extracts audio from one or more YouTube videos as MP3. Supports batch download.
 
 ```bash
+# Single video
 curl -X POST http://localhost:8080/download/audio \
   -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}' \
+  -d '{"urls": ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]}' \
   -o audio.mp3
+
+# Multiple videos
+curl -X POST http://localhost:8080/download/audio \
+  -H "Content-Type: application/json" \
+  -d '{
+    "urls": [
+      "https://www.youtube.com/watch?v=VIDEO_ID_1",
+      "https://www.youtube.com/watch?v=VIDEO_ID_2"
+    ]
+  }' \
+  -o audios.zip
 ```
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `url` | string | Yes | YouTube video URL |
+| `urls` | string[] | Yes | Array of YouTube video URLs |
+
+**Response:**
+- Single video → `.mp3` file
+- Multiple videos → `.zip` file containing all audio files
 
 ---
 

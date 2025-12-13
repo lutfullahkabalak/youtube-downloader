@@ -247,7 +247,7 @@ func TestDownloadVideoInvalidJSON(t *testing.T) {
 }
 
 func TestDownloadVideoEmptyURL(t *testing.T) {
-	body := bytes.NewBufferString(`{"url": ""}`)
+	body := bytes.NewBufferString(`{"urls": []}`)
 	req := httptest.NewRequest(http.MethodPost, "/download/video", body)
 	w := httptest.NewRecorder()
 
@@ -281,7 +281,7 @@ func TestDownloadAudioInvalidJSON(t *testing.T) {
 }
 
 func TestDownloadAudioEmptyURL(t *testing.T) {
-	body := bytes.NewBufferString(`{"url": ""}`)
+	body := bytes.NewBufferString(`{"urls": []}`)
 	req := httptest.NewRequest(http.MethodPost, "/download/audio", body)
 	w := httptest.NewRecorder()
 
@@ -419,14 +419,17 @@ func TestErrorResponseContentType(t *testing.T) {
 // ==================== Type Serialization Tests ====================
 
 func TestDownloadRequestJSON(t *testing.T) {
-	jsonStr := `{"url": "https://youtube.com/watch?v=test"}`
+	jsonStr := `{"urls": ["https://youtube.com/watch?v=test1", "https://youtube.com/watch?v=test2"]}`
 	var req DownloadRequest
 	err := json.Unmarshal([]byte(jsonStr), &req)
 	if err != nil {
 		t.Fatalf("Failed to unmarshal: %v", err)
 	}
-	if req.URL != "https://youtube.com/watch?v=test" {
-		t.Errorf("Unexpected URL: %s", req.URL)
+	if len(req.URLs) != 2 {
+		t.Errorf("Expected 2 URLs, got %d", len(req.URLs))
+	}
+	if req.URLs[0] != "https://youtube.com/watch?v=test1" {
+		t.Errorf("Unexpected URL: %s", req.URLs[0])
 	}
 }
 

@@ -77,7 +77,7 @@ const docTemplate = `{
         },
         "/download/audio": {
             "post": {
-                "description": "Download audio from a YouTube video in MP3 format",
+                "description": "Download audio from one or more YouTube videos in MP3 format. Returns single file for one URL, ZIP for multiple URLs.",
                 "consumes": [
                     "application/json"
                 ],
@@ -90,7 +90,7 @@ const docTemplate = `{
                 "summary": "Download audio",
                 "parameters": [
                     {
-                        "description": "Video URL",
+                        "description": "Video URLs",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -101,7 +101,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "MP3 audio file",
+                        "description": "MP3 audio file or ZIP archive",
                         "schema": {
                             "type": "file"
                         }
@@ -187,7 +187,7 @@ const docTemplate = `{
         },
         "/download/video": {
             "post": {
-                "description": "Download a YouTube video in MP4 format",
+                "description": "Download one or more YouTube videos in MP4 format. Returns single file for one URL, ZIP for multiple URLs.",
                 "consumes": [
                     "application/json"
                 ],
@@ -200,7 +200,7 @@ const docTemplate = `{
                 "summary": "Download video",
                 "parameters": [
                     {
-                        "description": "Video URL",
+                        "description": "Video URLs",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -211,7 +211,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "MP4 video file",
+                        "description": "MP4 video file or ZIP archive",
                         "schema": {
                             "type": "file"
                         }
@@ -418,8 +418,11 @@ const docTemplate = `{
         "main.DownloadRequest": {
             "type": "object",
             "properties": {
-                "url": {
-                    "type": "string"
+                "urls": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

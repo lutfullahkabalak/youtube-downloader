@@ -19,7 +19,7 @@ import (
 )
 
 type DownloadRequest struct {
-	URL string `json:"url"`
+	URLs []string `json:"urls"`
 }
 
 type SubtitleDownloadRequest struct {
@@ -129,12 +129,12 @@ func main() {
 
 // downloadVideo downloads a YouTube video as MP4
 // @Summary Download video
-// @Description Download a YouTube video in MP4 format
+// @Description Download one or more YouTube videos in MP4 format. Returns single file for one URL, ZIP for multiple URLs.
 // @Tags download
 // @Accept json
 // @Produce octet-stream
-// @Param request body DownloadRequest true "Video URL"
-// @Success 200 {file} binary "MP4 video file"
+// @Param request body DownloadRequest true "Video URLs"
+// @Success 200 {file} binary "MP4 video file or ZIP archive"
 // @Failure 400 {object} ErrorResponse "Invalid request"
 // @Failure 405 {string} string "Method not allowed"
 // @Failure 500 {object} ErrorResponse "Download failed"
@@ -151,60 +151,83 @@ func downloadVideo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.URL == "" {
-		respondWithError(w, "URL gerekli", http.StatusBadRequest)
+	if len(req.URLs) == 0 {
+		respondWithError(w, "En az bir URL gerekli", http.StatusBadRequest)
 		return
 	}
 
-	// Videonun ID'sini al (stabil dosya adı için)
-	videoID, err := getVideoID(req.URL)
-	if err != nil || videoID == "" {
-		respondWithError(w, "Video ID alınamadı", http.StatusBadRequest)
-		return
-	}
+	var allVideoFiles []string
 
-	// yt-dlp ile video indir ve MP4'e remux et
-	outputTpl := filepath.Join("./downloads", "%(id)s.%(ext)s")
-	cmd := exec.Command(
-		"yt-dlp",
-		"-f", "bv*+ba/best",
-		"--merge-output-format", "mp4",
-		"-o", outputTpl,
-		req.URL,
-	)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Printf("Video indirme hatası: %v, output: %s", err, string(output))
-		respondWithError(w, "Video indirilemedi: "+string(output), http.StatusInternalServerError)
-		return
-	}
-
-	// MP4 dosyasını bul
-	mp4Path := filepath.Join("./downloads", videoID+".mp4")
-	if !fileExists(mp4Path) {
-		// Bazı durumlarda uzantı değişik olabilir, id*.mp4 ara
-		candidates, _ := filepath.Glob(filepath.Join("./downloads", videoID+"*.mp4"))
-		if len(candidates) > 0 {
-			mp4Path = candidates[0]
-		} else {
-			respondWithError(w, "MP4 dosyası bulunamadı", http.StatusInternalServerError)
-			return
+	for _, url := range req.URLs {
+		// Videonun ID'sini al (stabil dosya adı için)
+		videoID, err := getVideoID(url)
+		if err != nil || videoID == "" {
+			log.Printf("Video ID alınamadı: %s", url)
+			continue
 		}
+
+		// yt-dlp ile video indir ve MP4'e remux et
+		outputTpl := filepath.Join("./downloads", "%(id)s.%(ext)s")
+		cmd := exec.Command(
+			"yt-dlp",
+			"-f", "bv*+ba/best",
+			"--merge-output-format", "mp4",
+			"-o", outputTpl,
+			url,
+		)
+
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("Video indirme hatası (%s): %v, output: %s", videoID, err, string(output))
+			continue
+		}
+
+		// MP4 dosyasını bul
+		mp4Path := filepath.Join("./downloads", videoID+".mp4")
+		if !fileExists(mp4Path) {
+			candidates, _ := filepath.Glob(filepath.Join("./downloads", videoID+"*.mp4"))
+			if len(candidates) > 0 {
+				mp4Path = candidates[0]
+			} else {
+				continue
+			}
+		}
+		allVideoFiles = append(allVideoFiles, mp4Path)
 	}
 
-	// Dosyayı yanıt olarak döndür
-	sendFile(w, mp4Path, "video/mp4", filepath.Base(mp4Path))
+	if len(allVideoFiles) == 0 {
+		respondWithError(w, "Hiçbir video indirilemedi", http.StatusInternalServerError)
+		return
+	}
+
+	// Tek dosya varsa doğrudan döndür, birden fazla varsa ZIP'le
+	if len(allVideoFiles) == 1 {
+		sendFile(w, allVideoFiles[0], "video/mp4", filepath.Base(allVideoFiles[0]))
+		return
+	}
+
+	zipPath := filepath.Join("./downloads", fmt.Sprintf("videos-%d.zip", time.Now().Unix()))
+	if err := zipFiles(allVideoFiles, zipPath); err != nil {
+		respondWithError(w, "Videolar ziplenemedi", http.StatusInternalServerError)
+		return
+	}
+
+	// ZIP oluşturulduktan sonra orijinal dosyaları sil
+	for _, file := range allVideoFiles {
+		os.Remove(file)
+	}
+
+	sendFile(w, zipPath, "application/zip", filepath.Base(zipPath))
 }
 
 // downloadAudio downloads a YouTube video's audio as MP3
 // @Summary Download audio
-// @Description Download audio from a YouTube video in MP3 format
+// @Description Download audio from one or more YouTube videos in MP3 format. Returns single file for one URL, ZIP for multiple URLs.
 // @Tags download
 // @Accept json
 // @Produce octet-stream
-// @Param request body DownloadRequest true "Video URL"
-// @Success 200 {file} binary "MP3 audio file"
+// @Param request body DownloadRequest true "Video URLs"
+// @Success 200 {file} binary "MP3 audio file or ZIP archive"
 // @Failure 400 {object} ErrorResponse "Invalid request"
 // @Failure 405 {string} string "Method not allowed"
 // @Failure 500 {object} ErrorResponse "Download failed"
@@ -221,40 +244,65 @@ func downloadAudio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.URL == "" {
-		respondWithError(w, "URL gerekli", http.StatusBadRequest)
+	if len(req.URLs) == 0 {
+		respondWithError(w, "En az bir URL gerekli", http.StatusBadRequest)
 		return
 	}
 
-	// ID'yi al ve sabit dosya adına indir
-	videoID, err := getVideoID(req.URL)
-	if err != nil || videoID == "" {
-		respondWithError(w, "Video ID alınamadı", http.StatusBadRequest)
-		return
-	}
+	var allAudioFiles []string
 
-	outputTpl := filepath.Join("./downloads", "%(id)s.%(ext)s")
-	cmd := exec.Command("yt-dlp", "-x", "--audio-format", "mp3", "-o", outputTpl, req.URL)
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		log.Printf("Ses indirme hatası: %v, output: %s", err, string(output))
-		respondWithError(w, "Ses indirilemedi: "+string(output), http.StatusInternalServerError)
-		return
-	}
-
-	mp3Path := filepath.Join("./downloads", videoID+".mp3")
-	if !fileExists(mp3Path) {
-		candidates, _ := filepath.Glob(filepath.Join("./downloads", videoID+"*.mp3"))
-		if len(candidates) > 0 {
-			mp3Path = candidates[0]
-		} else {
-			respondWithError(w, "MP3 dosyası bulunamadı", http.StatusInternalServerError)
-			return
+	for _, url := range req.URLs {
+		// ID'yi al ve sabit dosya adına indir
+		videoID, err := getVideoID(url)
+		if err != nil || videoID == "" {
+			log.Printf("Video ID alınamadı: %s", url)
+			continue
 		}
+
+		outputTpl := filepath.Join("./downloads", "%(id)s.%(ext)s")
+		cmd := exec.Command("yt-dlp", "-x", "--audio-format", "mp3", "-o", outputTpl, url)
+
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("Ses indirme hatası (%s): %v, output: %s", videoID, err, string(output))
+			continue
+		}
+
+		mp3Path := filepath.Join("./downloads", videoID+".mp3")
+		if !fileExists(mp3Path) {
+			candidates, _ := filepath.Glob(filepath.Join("./downloads", videoID+"*.mp3"))
+			if len(candidates) > 0 {
+				mp3Path = candidates[0]
+			} else {
+				continue
+			}
+		}
+		allAudioFiles = append(allAudioFiles, mp3Path)
 	}
 
-	sendFile(w, mp3Path, "audio/mpeg", filepath.Base(mp3Path))
+	if len(allAudioFiles) == 0 {
+		respondWithError(w, "Hiçbir ses dosyası indirilemedi", http.StatusInternalServerError)
+		return
+	}
+
+	// Tek dosya varsa doğrudan döndür, birden fazla varsa ZIP'le
+	if len(allAudioFiles) == 1 {
+		sendFile(w, allAudioFiles[0], "audio/mpeg", filepath.Base(allAudioFiles[0]))
+		return
+	}
+
+	zipPath := filepath.Join("./downloads", fmt.Sprintf("audios-%d.zip", time.Now().Unix()))
+	if err := zipFiles(allAudioFiles, zipPath); err != nil {
+		respondWithError(w, "Ses dosyaları ziplenemedi", http.StatusInternalServerError)
+		return
+	}
+
+	// ZIP oluşturulduktan sonra orijinal dosyaları sil
+	for _, file := range allAudioFiles {
+		os.Remove(file)
+	}
+
+	sendFile(w, zipPath, "application/zip", filepath.Base(zipPath))
 }
 
 // downloadSubtitle downloads subtitles for YouTube videos
