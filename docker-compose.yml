@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  youtube-downloader:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./downloads:/app/downloads
+    environment:
+      - PORT=8080
+    restart: unless-stopped
