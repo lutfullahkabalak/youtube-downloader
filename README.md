@@ -28,19 +28,29 @@ docker pull ghcr.io/lutfullahkabalak/youtube-downloader:latest
 docker run -p 3837:3837 ghcr.io/lutfullahkabalak/youtube-downloader:latest
 ```
 
-### Using Docker Compose (Recommended)
+### Using Docker Compose (local, recommended)
 
-Uses the image published by GitHub Actions to [GHCR](https://github.com/users/lutfullahkabalak/packages/container/package/youtube-downloader).
+Builds from the `Dockerfile` in the repo (good for development and testing changes).
 
 ```bash
 git clone https://github.com/lutfullahkabalak/youtube-downloader.git
 cd youtube-downloader
-docker compose pull && docker compose up -d
+docker compose up --build -d
 ```
 
-For a private GHCR package, run `docker login ghcr.io` first (use a GitHub personal access token with `read:packages`).
-
 The API will be available at `http://localhost:3837`
+
+### Docker Compose for Portainer / GHCR image
+
+Uses the pre-built image from [GHCR](https://github.com/users/lutfullahkabalak/packages/container/package/youtube-downloader) (published by GitHub Actions). Use [`docker-compose.portainer.yml`](docker-compose.portainer.yml) for Portainer stacks or any host where you want to pull instead of build.
+
+```bash
+git clone https://github.com/lutfullahkabalak/youtube-downloader.git
+cd youtube-downloader
+docker compose -f docker-compose.portainer.yml pull && docker compose -f docker-compose.portainer.yml up -d
+```
+
+For a private GHCR package, run `docker login ghcr.io` first (GitHub PAT with `read:packages`). In **Portainer**: Stacks → Add stack → paste the contents of `docker-compose.portainer.yml`, or deploy from the GitHub repository URL pointing at that file.
 
 ### Using Docker
 
@@ -376,7 +386,7 @@ Downloaded files are managed in two ways to keep disk usage bounded:
 - **Per-request cleanup:** Each file (mp4 / mp3 / srt / zip) is removed from `./downloads` immediately after it is streamed to the client.
 - **Periodic sweep:** A background goroutine runs every **30 minutes** and deletes any file in `./downloads` older than **1 hour**. This protects against orphaned files left behind by aborted requests or crashed downloads.
 
-If you mount `./downloads` as a Docker volume (see `docker-compose.yml`), the cleanup still applies inside the container.
+If you mount `./downloads` as a Docker volume (see `docker-compose.yml` or `docker-compose.portainer.yml`), the cleanup still applies inside the container.
 
 ## 🐳 Docker Image Details
 

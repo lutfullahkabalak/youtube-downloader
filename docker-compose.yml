@@ -1,8 +1,9 @@
+# Local development: builds the image from the Dockerfile in this repo.
 version: '3.8'
 
 services:
   youtube-downloader:
-    image: ghcr.io/lutfullahkabalak/youtube-downloader:latest
+    build: .
     ports:
       - "3837:3837"
     volumes:
