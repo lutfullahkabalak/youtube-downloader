@@ -30,11 +30,15 @@ docker run -p 3837:3837 ghcr.io/lutfullahkabalak/youtube-downloader:latest
 
 ### Using Docker Compose (Recommended)
 
+Uses the image published by GitHub Actions to [GHCR](https://github.com/users/lutfullahkabalak/packages/container/package/youtube-downloader).
+
 ```bash
 git clone https://github.com/lutfullahkabalak/youtube-downloader.git
 cd youtube-downloader
-docker-compose up --build -d
+docker compose pull && docker compose up -d
 ```
+
+For a private GHCR package, run `docker login ghcr.io` first (use a GitHub personal access token with `read:packages`).
 
 The API will be available at `http://localhost:3837`
 

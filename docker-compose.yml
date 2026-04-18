@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   youtube-downloader:
-    build: .
+    image: ghcr.io/lutfullahkabalak/youtube-downloader:latest
     ports:
       - "3837:3837"
     volumes:
