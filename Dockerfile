@@ -1,50 +1,37 @@
-# yt-dlp ve Python bağımlılıklarını içeren base image kullan
-FROM python:3.11-slim
+# syntax=docker/dockerfile:1
+# Build Go + swag on the host native arch (BUILDPLATFORM) to avoid QEMU failures during
+# `go install` / `swag init`. Cross-compile the binary to TARGETARCH for linux/arm64 etc.
+FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS builder
 
-# Sistem paketlerini güncelle ve gerekli araçları kur
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    wget \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# yt-dlp'yi kur
-RUN pip install --no-cache-dir yt-dlp
-
-# Go'yu kur
-RUN wget https://go.dev/dl/go1.21.5.linux-amd64.tar.gz \
-    && tar -C /usr/local -xzf go1.21.5.linux-amd64.tar.gz \
-    && rm go1.21.5.linux-amd64.tar.gz
-
-# Go PATH'ini ayarla
-ENV PATH="/usr/local/go/bin:/root/go/bin:${PATH}"
-
-# Swag CLI'yi kur
-RUN go install github.com/swaggo/swag/cmd/swag@latest
-
-# Çalışma dizinini ayarla
 WORKDIR /app
 
-# Go mod dosyasını kopyala
 COPY go.mod go.sum ./
-
-# Bağımlılıkları indir
 RUN go mod download
 
-# Kaynak kodları kopyala
 COPY . .
 
-# Swagger dokümanlarını oluştur
-RUN swag init
+RUN go install github.com/swaggo/swag/cmd/swag@latest \
+	&& swag init
 
-# Uygulamayı derle
-RUN go build -o youtube-downloader .
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
 
-# Downloads klasörünü oluştur
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o youtube-downloader .
+
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+	ffmpeg \
+	&& rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir yt-dlp
+
+WORKDIR /app
+
+COPY --from=builder /app/youtube-downloader ./youtube-downloader
+
 RUN mkdir -p downloads
 
-# Port'u expose et
 EXPOSE 3837
 
-# Uygulamayı çalıştır
 CMD ["./youtube-downloader"]
