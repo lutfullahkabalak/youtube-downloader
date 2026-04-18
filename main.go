@@ -122,6 +122,7 @@ func main() {
 	go startPeriodicCleanup(downloadsDir, 30*time.Minute, 1*time.Hour)
 
 	// HTTP route'ları
+	http.HandleFunc("/download/video/", downloadVideoByID) // GET /download/video/{id}
 	http.HandleFunc("/download/video", downloadVideo)
 	http.HandleFunc("/download/audio", downloadAudio)
 	http.HandleFunc("/download/subtitle", downloadSubtitle)
@@ -135,11 +136,69 @@ func main() {
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "3837"
 	}
 
 	log.Printf("Server başlatılıyor port %s", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+
+// downloadVideoByID downloads a YouTube video by ID via GET request
+// @Summary Download video by ID
+// @Description Download a YouTube video by its ID. Suitable for browser requests.
+// @Tags download
+// @Produce octet-stream
+// @Param id path string true "YouTube Video ID"
+// @Success 200 {file} binary "MP4 video file"
+// @Failure 400 {object} ErrorResponse "Invalid request"
+// @Failure 500 {object} ErrorResponse "Download failed"
+// @Router /download/video/{id} [get]
+func downloadVideoByID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// URL'den video ID'yi al: /download/video/{id}
+	videoID := strings.TrimPrefix(r.URL.Path, "/download/video/")
+	if videoID == "" {
+		respondWithError(w, "Video ID gerekli", http.StatusBadRequest)
+		return
+	}
+
+	// YouTube URL'sini oluştur
+	videoURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
+
+	// yt-dlp ile video indir
+	outputTpl := filepath.Join("./downloads", "%(id)s.%(ext)s")
+	cmd := exec.Command(
+		"yt-dlp",
+		"-f", "bv*+ba/best",
+		"--merge-output-format", "mp4",
+		"-o", outputTpl,
+		videoURL,
+	)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Video indirme hatası (%s): %v, output: %s", videoID, err, string(output))
+		respondWithError(w, "Video indirilemedi", http.StatusInternalServerError)
+		return
+	}
+
+	// MP4 dosyasını bul
+	mp4Path := filepath.Join("./downloads", videoID+".mp4")
+	if !fileExists(mp4Path) {
+		candidates, _ := filepath.Glob(filepath.Join("./downloads", videoID+"*.mp4"))
+		if len(candidates) > 0 {
+			mp4Path = candidates[0]
+		} else {
+			respondWithError(w, "Video dosyası bulunamadı", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	sendFile(w, mp4Path, "video/mp4", filepath.Base(mp4Path))
 }
 
 // downloadVideo downloads a YouTube video as MP4

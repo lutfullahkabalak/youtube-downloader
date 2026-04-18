@@ -4,9 +4,9 @@ services:
   youtube-downloader:
     build: .
     ports:
-      - "8080:8080"
+      - "3837:3837"
     volumes:
       - ./downloads:/app/downloads
     environment:
-      - PORT=8080
+      - PORT=3837
     restart: unless-stopped

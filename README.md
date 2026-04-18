@@ -2,7 +2,7 @@
 
 [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker)](https://www.docker.com/)
-[![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-Available-blue?style=flat&logo=github)](https://github.com/users/yourusername/packages/container/package/youtube-downloader)
+[![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-Available-blue?style=flat&logo=github)](https://github.com/users/lutfullahkabalak/packages/container/package/youtube-downloader)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 A fast and simple REST API service for downloading YouTube videos, audio, and subtitles. Built with Go and powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp).
@@ -24,25 +24,25 @@ A fast and simple REST API service for downloading YouTube videos, audio, and su
 ### Using GitHub Container Registry (Easiest)
 
 ```bash
-docker pull ghcr.io/yourusername/youtube-downloader:latest
-docker run -p 8080:8080 ghcr.io/yourusername/youtube-downloader:latest
+docker pull ghcr.io/lutfullahkabalak/youtube-downloader:latest
+docker run -p 3837:3837 ghcr.io/lutfullahkabalak/youtube-downloader:latest
 ```
 
 ### Using Docker Compose (Recommended)
 
 ```bash
-git clone https://github.com/yourusername/youtube-downloader.git
+git clone https://github.com/lutfullahkabalak/youtube-downloader.git
 cd youtube-downloader
 docker-compose up --build -d
 ```
 
-The API will be available at `http://localhost:8080`
+The API will be available at `http://localhost:3837`
 
 ### Using Docker
 
 ```bash
 docker build -t youtube-downloader .
-docker run -p 8080:8080 youtube-downloader
+docker run -p 3837:3837 youtube-downloader
 ```
 
 ### Local Development
@@ -56,12 +56,12 @@ docker run -p 8080:8080 youtube-downloader
 go run main.go
 ```
 
-## � Swagger Documentation
+## 📚 Swagger Documentation
 
 Interactive API documentation is available at:
 
 ```
-http://localhost:8080/swagger/index.html
+http://localhost:3837/swagger/index.html
 ```
 
 ![Swagger UI](https://img.shields.io/badge/Swagger-UI-85EA2D?style=flat&logo=swagger)
@@ -74,13 +74,13 @@ Downloads one or more YouTube videos as MP4. Supports batch download.
 
 ```bash
 # Single video
-curl -X POST http://localhost:8080/download/video \
+curl -X POST http://localhost:3837/download/video \
   -H "Content-Type: application/json" \
   -d '{"urls": ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]}' \
   -o video.mp4
 
 # Multiple videos
-curl -X POST http://localhost:8080/download/video \
+curl -X POST http://localhost:3837/download/video \
   -H "Content-Type: application/json" \
   -d '{
     "urls": [
@@ -101,19 +101,41 @@ curl -X POST http://localhost:8080/download/video \
 
 ---
 
+### Download Video by ID (GET)
+
+Downloads a single YouTube video by its ID via a simple `GET` request. Useful for direct browser links, `<a href>` tags, or quick `curl -o` calls without a JSON body.
+
+```bash
+curl -o video.mp4 http://localhost:3837/download/video/dQw4w9WgXcQ
+```
+
+Or open it directly in the browser:
+
+```
+http://localhost:3837/download/video/dQw4w9WgXcQ
+```
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string (path) | Yes | YouTube video ID (the `v=` parameter, e.g. `dQw4w9WgXcQ`) |
+
+**Response:** Binary `.mp4` file (`Content-Type: video/mp4`).
+
+---
+
 ### Download Audio
 
 Extracts audio from one or more YouTube videos as MP3. Supports batch download.
 
 ```bash
 # Single video
-curl -X POST http://localhost:8080/download/audio \
+curl -X POST http://localhost:3837/download/audio \
   -H "Content-Type: application/json" \
   -d '{"urls": ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"]}' \
   -o audio.mp3
 
 # Multiple videos
-curl -X POST http://localhost:8080/download/audio \
+curl -X POST http://localhost:3837/download/audio \
   -H "Content-Type: application/json" \
   -d '{
     "urls": [
@@ -139,7 +161,7 @@ curl -X POST http://localhost:8080/download/audio \
 Downloads subtitles for one or multiple videos. Supports batch download.
 
 ```bash
-curl -X POST http://localhost:8080/download/subtitle \
+curl -X POST http://localhost:3837/download/subtitle \
   -H "Content-Type: application/json" \
   -d '{
     "urls": [
@@ -169,7 +191,7 @@ curl -X POST http://localhost:8080/download/subtitle \
 Lists all videos from a YouTube channel.
 
 ```bash
-curl -X POST http://localhost:8080/channel/list \
+curl -X POST http://localhost:3837/channel/list \
   -H "Content-Type: application/json" \
   -d '{"url": "https://www.youtube.com/@ChannelName", "limit": 20}'
 ```
@@ -209,7 +231,7 @@ curl -X POST http://localhost:8080/channel/list \
 Lists all videos from a YouTube playlist.
 
 ```bash
-curl -X POST http://localhost:8080/playlist/list \
+curl -X POST http://localhost:3837/playlist/list \
   -H "Content-Type: application/json" \
   -d '{"url": "https://www.youtube.com/playlist?list=PLAYLIST_ID", "limit": 20}'
 ```
@@ -250,7 +272,7 @@ curl -X POST http://localhost:8080/playlist/list \
 Retrieves comments from a YouTube video.
 
 ```bash
-curl -X POST http://localhost:8080/video/comments \
+curl -X POST http://localhost:3837/video/comments \
   -H "Content-Type: application/json" \
   -d '{"url": "https://www.youtube.com/watch?v=VIDEO_ID", "limit": 50}'
 ```
@@ -290,7 +312,15 @@ curl -X POST http://localhost:8080/video/comments \
 ### Health Check
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:3837/health
+```
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "service": "youtube-downloader"
+}
 ```
 
 ## 📋 Examples
@@ -299,14 +329,14 @@ curl http://localhost:8080/health
 
 **Step 1:** Get the list of videos from a channel
 ```bash
-curl -X POST http://localhost:8080/channel/list \
+curl -X POST http://localhost:3837/channel/list \
   -H "Content-Type: application/json" \
   -d '{"url": "https://www.youtube.com/@ChannelName", "limit": 10}'
 ```
 
 **Step 2:** Use the returned `urls` array to download all subtitles
 ```bash
-curl -X POST http://localhost:8080/download/subtitle \
+curl -X POST http://localhost:3837/download/subtitle \
   -H "Content-Type: application/json" \
   -d '{
     "urls": ["<paste urls array here>"],
@@ -328,12 +358,21 @@ curl -X POST http://localhost:8080/download/subtitle \
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
-| `PORT` | `8080` | Server port |
+| `PORT` | `3837` | HTTP server port |
 
 ```bash
 export PORT=3000
 go run main.go
 ```
+
+### Automatic File Cleanup
+
+Downloaded files are managed in two ways to keep disk usage bounded:
+
+- **Per-request cleanup:** Each file (mp4 / mp3 / srt / zip) is removed from `./downloads` immediately after it is streamed to the client.
+- **Periodic sweep:** A background goroutine runs every **30 minutes** and deletes any file in `./downloads` older than **1 hour**. This protects against orphaned files left behind by aborted requests or crashed downloads.
+
+If you mount `./downloads` as a Docker volume (see `docker-compose.yml`), the cleanup still applies inside the container.
 
 ## 🐳 Docker Image Details
 
@@ -342,6 +381,77 @@ The Docker image includes:
 - yt-dlp (YouTube download tool)
 - ffmpeg (media processing)
 - Go 1.21 (application runtime)
+
+## 🗺️ Roadmap & Known Limitations
+
+### Known Limitations (2026 YouTube / yt-dlp realities)
+
+YouTube has tightened its anti-bot measures significantly throughout 2025-2026. If you deploy this service to a public cloud provider, expect to hit some or all of the following:
+
+- **"Sign in to confirm you're not a bot":** Requests originating from datacenter IP ranges (DigitalOcean, AWS, GCP, Hetzner, OVH, etc.) are aggressively challenged. Symptoms include `HTTP 403`, `Requested format is not available`, or empty responses.
+- **PO Token (Proof of Origin) requirement:** Most high-quality formats now require a valid PO token bound to the video ID and client. Without a PO token provider, yt-dlp may silently fall back to lower-quality formats or fail entirely.
+- **`n-parameter` JavaScript challenge:** yt-dlp needs a JavaScript runtime (Deno is recommended, Node.js works) to solve YouTube's player challenges. Missing it leads to `n challenge solving failed` warnings and missing formats.
+- **Cookie / account risk:** Using `--cookies` from a real account on a datacenter IP can get the account flagged or suspended. Always use a dedicated, low-value account for cookie auth.
+- **Comments API throttling:** The `/video/comments` endpoint can be slow or rate-limited on videos with very large comment counts.
+- **No job queue:** Each request runs `yt-dlp` synchronously. Long videos or high concurrency can exhaust HTTP timeouts and CPU.
+- **Single-instance state:** Cleanup, in-flight files and counters are in-process; horizontal scaling requires shared storage and coordination.
+
+### Planned Improvements
+
+The following improvements are tracked as candidates for future PRs. Contributions welcome.
+
+#### A. yt-dlp & YouTube anti-bot resilience (highest priority)
+
+- Optional `--cookies-from-browser` / `--cookies <file>` support via `YTDLP_COOKIES_FILE` env var.
+- Bundle [`bgutil-ytdlp-pot-provider`](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) in the Docker image for automatic PO token rotation.
+- Install `deno` in the container so yt-dlp can solve the `n-parameter` JS challenge reliably.
+- Pin `yt-dlp` to nightly (`pip install --upgrade --pre yt-dlp` or `yt-dlp -U --update-to nightly`) and rebuild the image on a schedule.
+- Add `--proxy` / residential proxy rotation support (env-driven).
+- Add retry & backoff flags by default: `--retries 10 --fragment-retries 10 --retry-sleep 5`.
+
+#### B. Performance & scalability
+
+- **Job queue architecture:** Replace blocking `exec.Command` with an async job model. `POST /download/video` returns a `job_id`, `GET /jobs/{id}` returns status, `GET /jobs/{id}/file` streams the result. Use Redis or an in-memory queue + worker pool.
+- **Concurrency limit:** Cap parallel `yt-dlp` processes with `golang.org/x/sync/semaphore` to protect CPU and disk I/O.
+- **Streaming downloads:** Pipe yt-dlp's `stdout` (`-o -`) directly into the HTTP response via `io.Copy`, eliminating disk I/O entirely for single-file requests.
+- **Result cache:** Cache downloaded files by `videoID + format` for the cleanup TTL (1h) and serve repeated requests from disk without re-downloading.
+
+#### C. Security
+
+- **URL validation:** Validate that incoming URLs belong to `youtube.com` / `youtu.be` host on the Go side before invoking yt-dlp.
+- **Rate limiting:** Per-IP rate limit using `golang.org/x/time/rate` (e.g. N requests/minute).
+- **Optional API key auth:** `X-API-Key` header check for public deployments.
+- **CORS:** Configurable CORS middleware for browser-based clients.
+- **Request size limit:** Wrap request bodies with `http.MaxBytesReader` to prevent abuse via large JSON payloads.
+
+#### D. Observability
+
+- **Structured logging:** Migrate `log.Printf` calls to `log/slog` with JSON output and fields like `request_id`, `video_id`, `duration_ms`, `error`.
+- **Prometheus metrics:** Expose `/metrics` with request counts, yt-dlp duration histogram, queue depth, disk usage, and error counters by reason.
+- **Graceful shutdown:** Use `http.Server` + `signal.NotifyContext` to drain in-flight requests and clean up `downloads/` on `SIGTERM`.
+- **Richer health check:** Include `yt-dlp` version, `ffmpeg` version, free disk space, and queue depth in `/health`.
+
+#### E. API quality
+
+- **Go 1.22+ enhanced mux patterns:** `mux.HandleFunc("POST /download/video", ...)` removes per-handler method checks while staying on stdlib.
+- **Quality / format parameters:** Add `quality` (`720p`, `1080p`, `best`) and `format` (`mp4`, `webm`, `mkv`) fields to `DownloadRequest`.
+- **Subtitle improvements:** Accept `lang` as `[]string`, add `auto_generated_only` and `translate_to` flags.
+- **Webhook callbacks:** Support `callback_url` for long-running jobs to POST results when ready.
+- **OpenAPI 3.x:** Migrate from `swaggo` (Swagger 2.0) to `swag` v2 or `oapi-codegen` for OpenAPI 3 compatibility.
+
+#### F. Testing & CI
+
+- Make `exec.Command` mockable behind an interface so handler logic can be unit-tested without yt-dlp installed.
+- Add a GitHub Actions workflow: `golangci-lint`, `go test ./...`, and multi-arch (`linux/amd64`, `linux/arm64`) Docker image build & push.
+
+#### G. Dockerfile improvements
+
+- **Multi-stage build:** Build the Go binary in a `golang:1.25-alpine` stage and copy only the binary into a final `python:3.11-slim` + `ffmpeg` + `yt-dlp` stage. This drops the final image size significantly and keeps the Go toolchain out of production.
+- **Non-root user:** Run as a dedicated `appuser` instead of `root`.
+- **HEALTHCHECK:** `HEALTHCHECK CMD curl -f http://localhost:3837/health || exit 1`.
+- **`.dockerignore`:** Exclude `downloads/`, `*.log`, and the local `youtube-downloader` build artifact to speed up builds and shrink the build context.
+
+---
 
 ## 🤝 Contributing
 

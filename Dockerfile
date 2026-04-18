@@ -44,7 +44,7 @@ RUN go build -o youtube-downloader .
 RUN mkdir -p downloads
 
 # Port'u expose et
-EXPOSE 8080
+EXPOSE 3837
 
 # Uygulamayı çalıştır
 CMD ["./youtube-downloader"]
