@@ -107,6 +107,37 @@ definitions:
           $ref: '#/definitions/main.VideoInfo'
         type: array
     type: object
+  main.ResolveRequest:
+    properties:
+      url:
+        type: string
+    type: object
+  main.ResolveResponse:
+    properties:
+      count:
+        type: integer
+      kind:
+        description: '"video" | "playlist"'
+        type: string
+      playlist_id:
+        type: string
+      success:
+        type: boolean
+      title:
+        type: string
+      urls:
+        items:
+          type: string
+        type: array
+      video_id:
+        type: string
+      videos:
+        items:
+          $ref: '#/definitions/main.VideoInfo'
+        type: array
+      watch_url:
+        type: string
+    type: object
   main.SubtitleDownloadRequest:
     properties:
       lang:
@@ -283,6 +314,33 @@ paths:
       summary: Download video
       tags:
       - download
+  /download/video/{id}:
+    get:
+      description: Download a YouTube video by its ID. Suitable for browser requests.
+      parameters:
+      - description: YouTube Video ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: MP4 video file
+          schema:
+            type: file
+        "400":
+          description: Invalid request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "500":
+          description: Download failed
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Download video by ID
+      tags:
+      - download
   /health:
     get:
       description: Check if the service is running
@@ -331,6 +389,41 @@ paths:
       summary: List playlist videos
       tags:
       - playlist
+  /url/resolve:
+    post:
+      consumes:
+      - application/json
+      description: Returns whether the URL is a video or playlist and basic metadata
+        from yt-dlp -J --flat-playlist.
+      parameters:
+      - description: YouTube URL
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/main.ResolveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/main.ResolveResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+        "405":
+          description: Method not allowed
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/main.ErrorResponse'
+      summary: Resolve YouTube URL
+      tags:
+      - url
   /video/comments:
     post:
       consumes:

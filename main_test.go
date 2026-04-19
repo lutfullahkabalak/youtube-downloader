@@ -218,6 +218,40 @@ func TestCleanupNonExistentDir(t *testing.T) {
 
 // ==================== HTTP Handler Tests ====================
 
+func TestResolveURLMethodNotAllowed(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/url/resolve", nil)
+	w := httptest.NewRecorder()
+
+	resolveURL(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("Expected status 405, got %d", w.Code)
+	}
+}
+
+func TestResolveURLInvalidJSON(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/url/resolve", bytes.NewBufferString("not json"))
+	w := httptest.NewRecorder()
+
+	resolveURL(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", w.Code)
+	}
+}
+
+func TestResolveURLEmptyURL(t *testing.T) {
+	body := bytes.NewBufferString(`{"url": ""}`)
+	req := httptest.NewRequest(http.MethodPost, "/url/resolve", body)
+	w := httptest.NewRecorder()
+
+	resolveURL(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected status 400, got %d", w.Code)
+	}
+}
+
 func TestDownloadVideoMethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/download/video", nil)
 	w := httptest.NewRecorder()
@@ -478,6 +512,27 @@ func TestChannelRequestDefaultLimit(t *testing.T) {
 	json.Unmarshal([]byte(jsonStr), &req)
 	if req.Limit != 0 {
 		t.Errorf("Expected limit 0, got %d", req.Limit)
+	}
+}
+
+func TestResolveResponseJSON(t *testing.T) {
+	resp := ResolveResponse{
+		Success:  true,
+		Kind:     "video",
+		Title:    "Test",
+		VideoID:  "abc",
+		WatchURL: "https://www.youtube.com/watch?v=abc",
+	}
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded ResolveResponse
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Kind != "video" || decoded.VideoID != "abc" {
+		t.Fatalf("unexpected: %+v", decoded)
 	}
 }
 

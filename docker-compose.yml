@@ -1,13 +1,30 @@
-# Local development: builds the image from the Dockerfile in this repo.
-version: '3.8'
+# Yerel geliştirme: repodaki Dockerfile ile imaj üretir (Vue + Go tek imaj).
+# Kullanım: docker compose up --build -d
 
 services:
   youtube-downloader:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: youtube-downloader
     ports:
       - "3837:3837"
     volumes:
       - ./downloads:/app/downloads
     environment:
-      - PORT=3837
+      PORT: "3837"
+      # İsteğe bağlı: API'ye tarayıcıdan farklı bir origin üzerinden erişilecekse (ör. https://app.example.com)
+      # CORS_ORIGIN: "*"
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os,urllib.request; p=os.environ.get('PORT','3837'); urllib.request.urlopen('http://127.0.0.1:'+p+'/health')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

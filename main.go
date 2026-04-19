@@ -2,9 +2,11 @@ package main
 
 import (
 	"archive/zip"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -17,6 +19,9 @@ import (
 
 	httpSwagger "github.com/swaggo/http-swagger"
 )
+
+//go:embed web/dist
+var webDist embed.FS
 
 type DownloadRequest struct {
 	URLs []string `json:"urls"`
@@ -97,6 +102,40 @@ type ErrorResponse struct {
 	Message string `json:"message"`
 }
 
+// ResolveRequest is the body for POST /url/resolve
+type ResolveRequest struct {
+	URL string `json:"url"`
+}
+
+// ResolveResponse describes whether a URL is a single video or a playlist (yt-dlp metadata).
+type ResolveResponse struct {
+	Success    bool        `json:"success"`
+	Kind       string      `json:"kind"` // "video" | "playlist"
+	Title      string      `json:"title,omitempty"`
+	VideoID    string      `json:"video_id,omitempty"`
+	WatchURL   string      `json:"watch_url,omitempty"`
+	PlaylistID string      `json:"playlist_id,omitempty"`
+	Count      int         `json:"count,omitempty"`
+	Videos     []VideoInfo `json:"videos,omitempty"`
+	URLs       []string    `json:"urls,omitempty"`
+}
+
+type ytdlpFlatEntry struct {
+	ID       string  `json:"id"`
+	Title    string  `json:"title"`
+	Duration float64 `json:"duration"`
+	URL      string  `json:"url"`
+}
+
+// ytdlpFlatJSON matches yt-dlp -J --flat-playlist output for playlist-like and video-like dumps.
+type ytdlpFlatJSON struct {
+	Type       string           `json:"_type"`
+	ID         string           `json:"id"`
+	Title      string           `json:"title"`
+	WebpageURL string           `json:"webpage_url"`
+	Entries    []ytdlpFlatEntry `json:"entries"`
+}
+
 // @title YouTube Downloader API
 // @version 1.0
 // @description A REST API for downloading YouTube videos, audio, and subtitles
@@ -121,18 +160,23 @@ func main() {
 	// Periyodik temizlik başlat (her 30 dakikada bir)
 	go startPeriodicCleanup(downloadsDir, 30*time.Minute, 1*time.Hour)
 
-	// HTTP route'ları
-	http.HandleFunc("/download/video/", downloadVideoByID) // GET /download/video/{id}
-	http.HandleFunc("/download/video", downloadVideo)
-	http.HandleFunc("/download/audio", downloadAudio)
-	http.HandleFunc("/download/subtitle", downloadSubtitle)
-	http.HandleFunc("/channel/list", listChannelVideos)
-	http.HandleFunc("/playlist/list", listPlaylistVideos)
-	http.HandleFunc("/video/comments", getVideoComments)
-	http.HandleFunc("/health", healthCheck)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/download/video/", downloadVideoByID) // GET /download/video/{id}
+	mux.HandleFunc("/download/video", downloadVideo)
+	mux.HandleFunc("/download/audio", downloadAudio)
+	mux.HandleFunc("/download/subtitle", downloadSubtitle)
+	mux.HandleFunc("/channel/list", listChannelVideos)
+	mux.HandleFunc("/playlist/list", listPlaylistVideos)
+	mux.HandleFunc("/url/resolve", resolveURL)
+	mux.HandleFunc("/video/comments", getVideoComments)
+	mux.HandleFunc("/health", healthCheck)
+	mux.Handle("/swagger/", httpSwagger.WrapHandler)
 
-	// Swagger UI
-	http.HandleFunc("/swagger/", httpSwagger.WrapHandler)
+	staticRoot, err := fs.Sub(webDist, "web/dist")
+	if err != nil {
+		log.Fatal("web/dist embed: ", err)
+	}
+	mux.Handle("/", http.FileServer(http.FS(staticRoot)))
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -140,7 +184,145 @@ func main() {
 	}
 
 	log.Printf("Server başlatılıyor port %s", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	log.Fatal(http.ListenAndServe(":"+port, withCORS(mux)))
+}
+
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := os.Getenv("CORS_ORIGIN")
+		if origin == "" {
+			origin = "*"
+		}
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Accept")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func videosFromFlatEntries(entries []ytdlpFlatEntry) ([]VideoInfo, []string) {
+	videos := make([]VideoInfo, 0, len(entries))
+	urls := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.ID == "" {
+			continue
+		}
+		duration := ""
+		if entry.Duration > 0 {
+			minutes := int(entry.Duration) / 60
+			seconds := int(entry.Duration) % 60
+			duration = fmt.Sprintf("%d:%02d", minutes, seconds)
+		}
+		videoURL := entry.URL
+		if videoURL == "" {
+			videoURL = fmt.Sprintf("https://www.youtube.com/watch?v=%s", entry.ID)
+		}
+		urls = append(urls, videoURL)
+		videos = append(videos, VideoInfo{
+			ID:       entry.ID,
+			Title:    entry.Title,
+			URL:      videoURL,
+			Duration: duration,
+		})
+	}
+	return videos, urls
+}
+
+// resolveURL classifies a URL as a single video or playlist using yt-dlp.
+// @Summary Resolve YouTube URL
+// @Description Returns whether the URL is a video or playlist and basic metadata from yt-dlp -J --flat-playlist.
+// @Tags url
+// @Accept json
+// @Produce json
+// @Param request body ResolveRequest true "YouTube URL"
+// @Success 200 {object} ResolveResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 405 {string} string "Method not allowed"
+// @Failure 500 {object} ErrorResponse
+// @Router /url/resolve [post]
+func resolveURL(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req ResolveRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondWithError(w, "Geçersiz JSON formatı", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.URL) == "" {
+		respondWithError(w, "URL gerekli", http.StatusBadRequest)
+		return
+	}
+
+	cmd := exec.Command("yt-dlp", "-J", "--flat-playlist", "--no-warnings", req.URL)
+	output, err := cmd.Output()
+	if err != nil {
+		log.Printf("URL çözümlenemedi: %v", err)
+		respondWithError(w, "URL çözümlenemedi veya desteklenmiyor", http.StatusBadRequest)
+		return
+	}
+
+	var meta ytdlpFlatJSON
+	if err := json.Unmarshal(output, &meta); err != nil {
+		log.Printf("yt-dlp JSON parse: %v", err)
+		respondWithError(w, "yt-dlp çıktısı işlenemedi", http.StatusInternalServerError)
+		return
+	}
+
+	isPlaylist := meta.Type == "playlist" || len(meta.Entries) > 1
+	resp := ResolveResponse{Success: true}
+
+	if isPlaylist {
+		videos, urls := videosFromFlatEntries(meta.Entries)
+		if len(videos) == 0 {
+			respondWithError(w, "Oynatma listesinde video bulunamadı", http.StatusBadRequest)
+			return
+		}
+		resp.Kind = "playlist"
+		resp.Title = meta.Title
+		resp.PlaylistID = meta.ID
+		resp.Count = len(videos)
+		resp.Videos = videos
+		resp.URLs = urls
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	if meta.Type == "video" || (meta.ID != "" && len(meta.Entries) == 0) {
+		resp.Kind = "video"
+		resp.Title = meta.Title
+		resp.VideoID = meta.ID
+		resp.WatchURL = meta.WebpageURL
+		if resp.WatchURL == "" && meta.ID != "" {
+			resp.WatchURL = fmt.Sprintf("https://www.youtube.com/watch?v=%s", meta.ID)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	if len(meta.Entries) == 1 {
+		e := meta.Entries[0]
+		resp.Kind = "video"
+		resp.Title = e.Title
+		resp.VideoID = e.ID
+		resp.WatchURL = e.URL
+		if resp.WatchURL == "" && e.ID != "" {
+			resp.WatchURL = fmt.Sprintf("https://www.youtube.com/watch?v=%s", e.ID)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+		return
+	}
+
+	respondWithError(w, "URL tanınamadı", http.StatusBadRequest)
 }
 
 // downloadVideoByID downloads a YouTube video by ID via GET request
@@ -760,53 +942,14 @@ func listPlaylistVideos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// JSON çıktısını parse et
-	var playlistData struct {
-		ID      string `json:"id"`
-		Title   string `json:"title"`
-		Entries []struct {
-			ID       string  `json:"id"`
-			Title    string  `json:"title"`
-			Duration float64 `json:"duration"`
-			URL      string  `json:"url"`
-		} `json:"entries"`
-	}
-
+	var playlistData ytdlpFlatJSON
 	if err := json.Unmarshal(output, &playlistData); err != nil {
 		log.Printf("JSON parse hatası: %v", err)
 		respondWithError(w, "Playlist verisi işlenemedi", http.StatusInternalServerError)
 		return
 	}
 
-	// Video listesini oluştur
-	videos := make([]VideoInfo, 0, len(playlistData.Entries))
-	urls := make([]string, 0, len(playlistData.Entries))
-	for _, entry := range playlistData.Entries {
-		if entry.ID == "" {
-			continue
-		}
-
-		// Süreyi formatla
-		duration := ""
-		if entry.Duration > 0 {
-			minutes := int(entry.Duration) / 60
-			seconds := int(entry.Duration) % 60
-			duration = fmt.Sprintf("%d:%02d", minutes, seconds)
-		}
-
-		videoURL := entry.URL
-		if videoURL == "" {
-			videoURL = fmt.Sprintf("https://www.youtube.com/watch?v=%s", entry.ID)
-		}
-
-		urls = append(urls, videoURL)
-		videos = append(videos, VideoInfo{
-			ID:       entry.ID,
-			Title:    entry.Title,
-			URL:      videoURL,
-			Duration: duration,
-		})
-	}
+	videos, urls := videosFromFlatEntries(playlistData.Entries)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(PlaylistResponse{

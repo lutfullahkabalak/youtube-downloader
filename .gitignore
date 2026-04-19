@@ -21,6 +21,9 @@ go.work
 # Downloads directory
 downloads/
 
+# Frontend
+frontend/node_modules/
+
 # IDE files
 .vscode/
 .idea/

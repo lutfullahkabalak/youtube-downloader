@@ -1,15 +1,30 @@
-# Portainer / server deploy: uses the image built and pushed by GitHub Actions to GHCR.
-# In Portainer: Stacks → Add stack → Web editor → paste this file, or set "Repository URL"
-# to this compose file on GitHub (raw).
-version: '3.8'
+# Sunucu / Portainer: GitHub Actions ile GHCR'ye push edilen imajı çeker.
+# Kullanım: docker compose -f docker-compose.portainer.yml pull && docker compose -f docker-compose.portainer.yml up -d
+# Portainer: Stacks → Web editor ile yapıştırın veya repo URL ile bu dosyayı işaret edin.
 
 services:
   youtube-downloader:
     image: ghcr.io/lutfullahkabalak/youtube-downloader:latest
+    pull_policy: always
+    container_name: youtube-downloader
     ports:
       - "3837:3837"
     volumes:
       - ./downloads:/app/downloads
     environment:
-      - PORT=3837
+      PORT: "3837"
+      # İsteğe bağlı: CORS (varsayılan uygulama içinde *)
+      # CORS_ORIGIN: "https://ornek-alan.com"
     restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os,urllib.request; p=os.environ.get('PORT','3837'); urllib.request.urlopen('http://127.0.0.1:'+p+'/health')",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

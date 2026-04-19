@@ -4,3 +4,5 @@ downloads
 youtube-downloader
 .DS_Store
 *.log
+frontend/node_modules
+web/dist
