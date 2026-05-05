@@ -418,7 +418,7 @@ const docTemplate = `{
                 "summary": "Get video comments",
                 "parameters": [
                     {
-                        "description": "Video URL and optional limit",
+                        "description": "Video URL, optional limit; compact=true → author, text, timestamp (RFC3339)",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -429,7 +429,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "List of comments",
+                        "description": "Comments (compact=true ise comments öğeleri yalnızca author, text, timestamp ISO)",
                         "schema": {
                             "$ref": "#/definitions/main.CommentResponse"
                         }
@@ -529,6 +529,10 @@ const docTemplate = `{
         "main.CommentRequest": {
             "type": "object",
             "properties": {
+                "compact": {
+                    "description": "true: yalnızca author, text, timestamp (RFC3339 tarih string’i)",
+                    "type": "boolean"
+                },
                 "limit": {
                     "type": "integer"
                 },
@@ -563,6 +567,10 @@ const docTemplate = `{
         "main.DownloadRequest": {
             "type": "object",
             "properties": {
+                "quality": {
+                    "description": "\"best\" | \"1080\" | \"720\" | \"480\" | \"360\"",
+                    "type": "string"
+                },
                 "urls": {
                     "type": "array",
                     "items": {

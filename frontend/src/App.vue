@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 
 type ContentType = 'video' | 'audio' | 'subtitle' | 'comments'
+type VideoQuality = 'best' | '1080' | '720' | '480' | '360'
 
 interface VideoInfo {
   id: string
@@ -32,46 +33,111 @@ interface CommentResponse {
   comments: unknown[]
 }
 
+interface QueueItem {
+  key: string
+  id?: string
+  url: string
+  title: string
+  duration?: string
+  thumbnail_url?: string
+  source: 'video' | 'playlist'
+}
+
 const inputUrl = ref('')
 const contentType = ref<ContentType>('video')
+const videoQuality = ref<VideoQuality>('best')
 const subLang = ref('tr')
+/** Yorumlar: API'ye compact=true — yalnızca author, text, timestamp (ISO 8601 / RFC3339) */
+const commentsCompact = ref(true)
+/** yt-dlp max_comments — arayüz daha önce 200 sabitti; istenen adedi buradan gönderin */
+const commentsLimit = ref(500)
 const loading = ref(false)
 const errorMsg = ref('')
-const resolved = ref<ResolveResponse | null>(null)
+const queueItems = ref<QueueItem[]>([])
 const selectedIds = ref<Set<string>>(new Set())
 const progressText = ref('')
 
-watch(resolved, (r) => {
-  selectedIds.value = new Set()
-  if (r?.kind === 'playlist' && r.videos) {
-    for (const v of r.videos) {
-      selectedIds.value.add(v.id)
-    }
+const selectedCount = computed(() => {
+  let n = 0
+  for (const it of queueItems.value) {
+    if (selectedIds.value.has(it.key)) n++
   }
+  return n
 })
 
-const playlistVideos = computed(() => resolved.value?.videos ?? [])
-
-function toggleId(id: string) {
+function toggleId(key: string) {
   const s = new Set(selectedIds.value)
-  if (s.has(id)) {
-    s.delete(id)
+  if (s.has(key)) {
+    s.delete(key)
   } else {
-    s.add(id)
+    s.add(key)
   }
   selectedIds.value = s
 }
 
 function selectAll() {
   const s = new Set<string>()
-  for (const v of playlistVideos.value) {
-    s.add(v.id)
+  for (const it of queueItems.value) {
+    s.add(it.key)
   }
   selectedIds.value = s
 }
 
 function selectNone() {
   selectedIds.value = new Set()
+}
+
+function removeItem(key: string) {
+  queueItems.value = queueItems.value.filter((x) => x.key !== key)
+  if (selectedIds.value.has(key)) {
+    const s = new Set(selectedIds.value)
+    s.delete(key)
+    selectedIds.value = s
+  }
+}
+
+function removeSelected() {
+  const selected = selectedIds.value
+  if (selected.size === 0) return
+  queueItems.value = queueItems.value.filter((x) => !selected.has(x.key))
+  selectedIds.value = new Set()
+}
+
+function extractUrls(text: string): string[] {
+  const matches = text.match(/https?:\/\/[^\s<>"']+/gi) ?? []
+  const urls = matches.map((s) => s.trim()).filter(Boolean)
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const u of urls) {
+    if (seen.has(u)) continue
+    seen.add(u)
+    out.push(u)
+  }
+  return out
+}
+
+function guessVideoIdFromUrl(url: string): string | undefined {
+  try {
+    const u = new URL(url)
+    const v = u.searchParams.get('v')
+    if (v) return v
+    if (u.hostname === 'youtu.be') {
+      const p = u.pathname.replace(/^\/+/, '').trim()
+      if (p) return p.split(/[/?#&]/)[0]
+    }
+  } catch {
+    // ignore
+  }
+  return undefined
+}
+
+function thumbnailUrlForId(id: string): string {
+  return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
+}
+
+function clampCommentLimit(n: number): number {
+  if (!Number.isFinite(n) || n < 1) return 100
+  return Math.min(10000, Math.floor(n))
 }
 
 async function postJSON<T>(path: string, body: object): Promise<T> {
@@ -91,39 +157,86 @@ async function postJSON<T>(path: string, body: object): Promise<T> {
   return (await res.json()) as T
 }
 
-async function resolveLink() {
+function addQueueItem(item: Omit<QueueItem, 'key'> & { key?: string }) {
+  const key = item.key ?? item.id ?? item.url
+  if (!key) return
+  if (queueItems.value.some((x) => x.key === key)) return
+  queueItems.value = [...queueItems.value, { ...item, key }]
+  selectedIds.value = new Set([...selectedIds.value, key])
+}
+
+async function enqueueFromText(text: string) {
   errorMsg.value = ''
-  resolved.value = null
-  const url = inputUrl.value.trim()
-  if (!url) {
-    errorMsg.value = 'Bir YouTube bağlantısı yapıştırın.'
-    return
-  }
+  const urls = extractUrls(text)
+  if (urls.length === 0) return
+
   loading.value = true
+  progressText.value = ''
   try {
-    const data = await postJSON<ResolveResponse>('/url/resolve', { url })
-    if (!data.success) {
-      throw new Error('Çözümleme başarısız')
+    let i = 0
+    for (const url of urls) {
+      i++
+      progressText.value = `Bağlantılar ekleniyor ${i} / ${urls.length}…`
+      const data = await postJSON<ResolveResponse>('/url/resolve', { url })
+      if (!data.success) continue
+
+      if (data.kind === 'playlist' && data.videos?.length) {
+        for (const v of data.videos) {
+          const id = v.id || guessVideoIdFromUrl(v.url)
+          addQueueItem({
+            id,
+            url: v.url,
+            title: v.title || '(başlıksız)',
+            duration: v.duration,
+            thumbnail_url: id ? thumbnailUrlForId(id) : undefined,
+            source: 'playlist',
+          })
+        }
+        continue
+      }
+
+      const resolvedUrl = data.watch_url || url
+      const id =
+        data.video_id || guessVideoIdFromUrl(resolvedUrl) || guessVideoIdFromUrl(url) || guessVideoIdFromUrl(text)
+      addQueueItem({
+        id,
+        url: resolvedUrl,
+        title: data.title || '(başlıksız)',
+        thumbnail_url: id ? thumbnailUrlForId(id) : undefined,
+        source: 'video',
+      })
     }
-    resolved.value = data
   } catch (e) {
     errorMsg.value = e instanceof Error ? e.message : String(e)
   } finally {
     loading.value = false
+    progressText.value = ''
   }
 }
 
-function selectedUrls(): string[] {
-  const r = resolved.value
-  if (!r) return []
-  if (r.kind === 'video') {
-    return [r.watch_url || '']
+async function addFromInput() {
+  const text = inputUrl.value.trim()
+  if (!text) {
+    errorMsg.value = 'Bir veya birden fazla YouTube bağlantısı yapıştırın.'
+    return
   }
+  await enqueueFromText(text)
+  inputUrl.value = ''
+}
+
+async function onPaste(e: ClipboardEvent) {
+  const text = e.clipboardData?.getData('text') ?? ''
+  const urls = extractUrls(text)
+  if (urls.length === 0) return
+  e.preventDefault()
+  inputUrl.value = urls.join('\n')
+}
+
+function selectedUrls(): string[] {
   const urls: string[] = []
-  for (const v of playlistVideos.value) {
-    if (selectedIds.value.has(v.id)) {
-      urls.push(v.url)
-    }
+  for (const it of queueItems.value) {
+    if (!selectedIds.value.has(it.key)) continue
+    if (it.url) urls.push(it.url)
   }
   return urls
 }
@@ -171,7 +284,7 @@ async function runDownloadZip() {
       return
     }
     if (contentType.value === 'video') {
-      await downloadBlob('/download/video', { urls }, 'video.zip')
+      await downloadBlob('/download/video', { urls, quality: videoQuality.value }, 'video.zip')
     } else if (contentType.value === 'audio') {
       await downloadBlob('/download/audio', { urls }, 'audio.zip')
     } else {
@@ -198,8 +311,13 @@ async function runDownloadOneByOne() {
       for (const u of urls) {
         i++
         progressText.value = `Yorumlar ${i} / ${urls.length}…`
-        const data = await postJSON<CommentResponse>('/video/comments', { url: u, limit: 200 })
-        downloadJsonFile(`yorumlar-${data.video_id}.json`, data)
+        const data = await postJSON<CommentResponse>('/video/comments', {
+          url: u,
+          limit: clampCommentLimit(commentsLimit.value),
+          compact: commentsCompact.value,
+        })
+        const suffix = commentsCompact.value ? '-ozet' : ''
+        downloadJsonFile(`yorumlar-${data.video_id}${suffix}.json`, data)
       }
       progressText.value = ''
       return
@@ -217,7 +335,9 @@ async function runDownloadOneByOne() {
       const body =
         contentType.value === 'subtitle'
           ? { urls: [u], lang: subLang.value }
-          : { urls: [u] }
+          : contentType.value === 'video'
+            ? { urls: [u], quality: videoQuality.value }
+            : { urls: [u] }
       const ext =
         contentType.value === 'video' ? 'mp4' : contentType.value === 'audio' ? 'mp3' : 'srt'
       await downloadBlob(path, body, `item-${i}.${ext}`)
@@ -238,45 +358,14 @@ function downloadJsonFile(filename: string, data: unknown) {
   a.click()
   URL.revokeObjectURL(a.href)
 }
-
-async function runSingleVideoFlow() {
-  const r = resolved.value
-  if (!r || r.kind !== 'video') return
-  const url = r.watch_url
-  if (!url) {
-    errorMsg.value = 'Geçerli bir izleme URL’si yok.'
-    return
-  }
-  errorMsg.value = ''
-  loading.value = true
-  progressText.value = ''
-  try {
-    if (contentType.value === 'comments') {
-      const data = await postJSON<CommentResponse>('/video/comments', { url, limit: 200 })
-      downloadJsonFile(`yorumlar-${data.video_id}.json`, data)
-      return
-    }
-    if (contentType.value === 'video') {
-      await downloadBlob('/download/video', { urls: [url] }, 'video.mp4')
-    } else if (contentType.value === 'audio') {
-      await downloadBlob('/download/audio', { urls: [url] }, 'audio.mp3')
-    } else {
-      await downloadBlob('/download/subtitle', { urls: [url], lang: subLang.value }, 'subtitle.srt')
-    }
-  } catch (e) {
-    errorMsg.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    loading.value = false
-  }
-}
-
-const sourceUrlForResolve = computed(() => inputUrl.value.trim())
 </script>
 
 <template>
   <div>
     <h1>YouTube indirici</h1>
-    <p class="lead">Bağlantıyı yapıştırın, ne indirmek istediğinizi seçin, önce bağlantıyı çözün.</p>
+    <p class="lead">
+      Bağlantıları yapıştırın; listeye eklensin. Aksiyon seçin ve seçilenleri tek tek veya ZIP olarak indirin.
+    </p>
 
     <div class="toolbar">
       <input
@@ -284,88 +373,126 @@ const sourceUrlForResolve = computed(() => inputUrl.value.trim())
         type="url"
         autocomplete="off"
         placeholder="https://www.youtube.com/watch?v=… veya oynatma listesi"
-        @keydown.enter.prevent="resolveLink"
+        @paste="onPaste"
+        @keydown.enter.prevent="addFromInput"
       />
+      <button type="button" class="btn" :disabled="loading" @click="addFromInput">Listeye ekle</button>
+    </div>
+
+    <div class="actions-bar">
       <select v-model="contentType">
         <option value="video">Video (MP4)</option>
         <option value="audio">Ses (MP3)</option>
         <option value="subtitle">Altyazı (SRT)</option>
         <option value="comments">Yorumlar (JSON)</option>
       </select>
-      <button type="button" class="btn" :disabled="loading" @click="resolveLink">
-        {{ loading && !resolved ? 'Çözülüyor…' : 'Bağlantıyı çöz' }}
-      </button>
-    </div>
 
-    <div v-if="contentType === 'subtitle'" class="sub-lang">
-      <label for="lang">Altyazı dili (kod)</label>
-      <input id="lang" v-model="subLang" type="text" maxlength="8" placeholder="tr" />
+      <select v-if="contentType === 'video'" v-model="videoQuality">
+        <option value="best">Kalite: En iyi</option>
+        <option value="1080">Kalite: 1080p</option>
+        <option value="720">Kalite: 720p</option>
+        <option value="480">Kalite: 480p</option>
+        <option value="360">Kalite: 360p</option>
+      </select>
+
+      <div v-if="contentType === 'subtitle'" class="sub-lang">
+        <label for="lang">Altyazı dili (kod)</label>
+        <input id="lang" v-model="subLang" type="text" maxlength="8" placeholder="tr" />
+      </div>
+
+      <div v-if="contentType === 'comments'" class="sub-lang comments-opt">
+        <label class="check">
+          <input v-model="commentsCompact" type="checkbox" />
+          Sadeleştirilmiş yorum JSON’u (yazar, metin, tarih-saat ISO)
+        </label>
+        <label class="comments-limit-label" for="comments-limit">
+          En fazla yorum
+          <input
+            id="comments-limit"
+            v-model.number="commentsLimit"
+            type="number"
+            min="1"
+            max="10000"
+            step="1"
+          />
+        </label>
+      </div>
     </div>
 
     <p v-if="errorMsg" class="err">{{ errorMsg }}</p>
     <p v-if="progressText" class="progress">{{ progressText }}</p>
 
-    <div v-if="resolved" class="panel">
-      <h2>
-        <span :class="resolved.kind === 'playlist' ? 'badge badge-pl' : 'badge badge-video'">
-          {{ resolved.kind === 'playlist' ? 'Oynatma listesi' : 'Video' }}
-        </span>
-        {{ resolved.title || '(başlıksız)' }}
-      </h2>
-      <p v-if="resolved.kind === 'video' && resolved.video_id" class="meta mono">ID: {{ resolved.video_id }}</p>
-      <p v-if="resolved.kind === 'playlist'" class="meta">
-        {{ resolved.count }} video · Kaynak:
-        <span class="mono">{{ sourceUrlForResolve }}</span>
-      </p>
+    <div v-if="queueItems.length" class="panel">
+      <h2>Liste ({{ selectedCount }} / {{ queueItems.length }} seçili)</h2>
+      <p class="meta">Toplu (tek istekte ZIP) veya tek tek dosya indirme.</p>
 
-      <template v-if="resolved.kind === 'video'">
-        <div class="btn-row">
-          <button type="button" class="btn" :disabled="loading" @click="runSingleVideoFlow">
-            İndir
-          </button>
-        </div>
-      </template>
+      <div class="list-actions">
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="loading || queueItems.length === 0"
+          @click="selectAll"
+        >
+          Tümünü seç
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          :disabled="loading || queueItems.length === 0"
+          @click="selectNone"
+        >
+          Hiçbirini seçme
+        </button>
+        <button type="button" class="btn btn-danger" :disabled="loading || selectedCount === 0" @click="removeSelected">
+          Seçilenleri sil
+        </button>
+      </div>
 
-      <template v-else>
-        <p class="meta">Toplu (tek istekte ZIP) veya tek tek dosya indirme.</p>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 2.5rem"></th>
-                <th>Video</th>
-                <th style="width: 5rem">Süre</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="v in playlistVideos" :key="v.id">
-                <td>
-                  <input type="checkbox" :checked="selectedIds.has(v.id)" @change="toggleId(v.id)" />
-                </td>
-                <td>{{ v.title }}</td>
-                <td>{{ v.duration || '—' }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="small-actions">
-          <button type="button" class="btn-secondary" @click="selectAll">Tümünü seç</button>
-          <button type="button" class="btn-secondary" @click="selectNone">Hiçbirini seçme</button>
-        </div>
-        <div class="btn-row">
-          <button
-            type="button"
-            class="btn"
-            :disabled="loading || contentType === 'comments'"
-            @click="runDownloadZip"
-          >
-            Seçilenleri ZIP ile indir
-          </button>
-          <button type="button" class="btn btn-secondary" :disabled="loading" @click="runDownloadOneByOne">
-            {{ contentType === 'comments' ? 'Seçilenleri tek tek JSON' : 'Seçilenleri tek tek indir' }}
-          </button>
-        </div>
-      </template>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 2.5rem"></th>
+              <th style="width: 4.5rem"></th>
+              <th>Video</th>
+              <th style="width: 5rem">Süre</th>
+              <th style="width: 6rem"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="it in queueItems" :key="it.key">
+              <td>
+                <input type="checkbox" :checked="selectedIds.has(it.key)" @change="toggleId(it.key)" />
+              </td>
+              <td>
+                <img v-if="it.thumbnail_url" class="thumb" :src="it.thumbnail_url" alt="" loading="lazy" />
+                <div v-else class="thumb thumb-empty" aria-hidden="true"></div>
+              </td>
+              <td>
+                <div class="title-row">
+                  <span class="item-title">{{ it.title }}</span>
+                  <span class="item-url mono">{{ it.url }}</span>
+                </div>
+              </td>
+              <td>{{ it.duration || '—' }}</td>
+              <td>
+                <button type="button" class="btn btn-danger btn-mini" :disabled="loading" @click="removeItem(it.key)">
+                  Sil
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="btn-row">
+        <button type="button" class="btn" :disabled="loading || contentType === 'comments'" @click="runDownloadZip">
+          Seçilenleri ZIP ile indir
+        </button>
+        <button type="button" class="btn btn-secondary" :disabled="loading" @click="runDownloadOneByOne">
+          {{ contentType === 'comments' ? 'Seçilenleri tek tek JSON' : 'Seçilenleri tek tek indir' }}
+        </button>
+      </div>
     </div>
 
     <p class="meta" style="margin-top: 2rem; text-align: center">

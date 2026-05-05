@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,7 +25,8 @@ import (
 var webDist embed.FS
 
 type DownloadRequest struct {
-	URLs []string `json:"urls"`
+	URLs    []string `json:"urls"`
+	Quality string   `json:"quality,omitempty"` // "best" | "1080" | "720" | "480" | "360"
 }
 
 type SubtitleDownloadRequest struct {
@@ -38,8 +40,9 @@ type ChannelRequest struct {
 }
 
 type CommentRequest struct {
-	URL   string `json:"url"`
-	Limit int    `json:"limit,omitempty"`
+	URL     string `json:"url"`
+	Limit   int    `json:"limit,omitempty"`
+	Compact bool   `json:"compact,omitempty"` // true: yalnızca author, text, timestamp (RFC3339 tarih string’i)
 }
 
 type Comment struct {
@@ -60,6 +63,21 @@ type CommentResponse struct {
 	VideoTitle   string    `json:"video_title"`
 	CommentCount int       `json:"comment_count"`
 	Comments     []Comment `json:"comments"`
+}
+
+// CompactComment yalnızca author, metin ve zaman (timestamp, RFC3339 UTC string).
+type CompactComment struct {
+	Author    string `json:"author"`
+	Text      string `json:"text"`
+	Timestamp string `json:"timestamp,omitempty"`
+}
+
+type CommentCompactResponse struct {
+	Success      bool             `json:"success"`
+	VideoID      string           `json:"video_id"`
+	VideoTitle   string           `json:"video_title"`
+	CommentCount int              `json:"comment_count"`
+	Comments     []CompactComment `json:"comments"`
 }
 
 type VideoInfo struct {
@@ -347,6 +365,7 @@ func downloadVideoByID(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, "Video ID gerekli", http.StatusBadRequest)
 		return
 	}
+	quality := strings.TrimSpace(r.URL.Query().Get("quality"))
 
 	// YouTube URL'sini oluştur
 	videoURL := fmt.Sprintf("https://www.youtube.com/watch?v=%s", videoID)
@@ -355,7 +374,7 @@ func downloadVideoByID(w http.ResponseWriter, r *http.Request) {
 	outputTpl := filepath.Join("./downloads", "%(id)s.%(ext)s")
 	cmd := exec.Command(
 		"yt-dlp",
-		"-f", "bv*+ba/best",
+		"-f", videoFormatForQuality(quality),
 		"--merge-output-format", "mp4",
 		"-o", outputTpl,
 		videoURL,
@@ -426,7 +445,7 @@ func downloadVideo(w http.ResponseWriter, r *http.Request) {
 		outputTpl := filepath.Join("./downloads", "%(id)s.%(ext)s")
 		cmd := exec.Command(
 			"yt-dlp",
-			"-f", "bv*+ba/best",
+			"-f", videoFormatForQuality(req.Quality),
 			"--merge-output-format", "mp4",
 			"-o", outputTpl,
 			url,
@@ -690,6 +709,19 @@ func respondWithError(w http.ResponseWriter, message string, statusCode int) {
 		Message: message,
 	}
 	json.NewEncoder(w).Encode(response)
+}
+
+func videoFormatForQuality(quality string) string {
+	q := strings.TrimSpace(strings.ToLower(quality))
+	if q == "" || q == "best" {
+		return "bv*+ba/best"
+	}
+	h, err := strconv.Atoi(q)
+	if err != nil || h <= 0 {
+		return "bv*+ba/best"
+	}
+	// Prefer best separate video+audio within height constraint; fall back to a single file under constraint.
+	return fmt.Sprintf("bv*[height<=%d]+ba/best[height<=%d]/b[height<=%d]/best[height<=%d]", h, h, h, h)
 }
 
 // getVideoID runs yt-dlp to retrieve the normalized video ID for stable filenames
@@ -968,8 +1000,8 @@ func listPlaylistVideos(w http.ResponseWriter, r *http.Request) {
 // @Tags video
 // @Accept json
 // @Produce json
-// @Param request body CommentRequest true "Video URL and optional limit"
-// @Success 200 {object} CommentResponse "List of comments"
+// @Param request body CommentRequest true "Video URL, optional limit; compact=true → author, text, timestamp (RFC3339)"
+// @Success 200 {object} CommentResponse "Comments (compact=true ise comments öğeleri yalnızca author, text, timestamp ISO)"
 // @Failure 400 {object} ErrorResponse "Invalid request"
 // @Failure 405 {string} string "Method not allowed"
 // @Failure 500 {object} ErrorResponse "Failed to fetch comments"
@@ -991,10 +1023,14 @@ func getVideoComments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Varsayılan limit
+	// Varsayılan limit; üst sınır aşırı yt-dlp/YouTube yükünü sınırlar.
+	const maxCommentLimit = 10000
 	limit := req.Limit
 	if limit <= 0 {
 		limit = 100 // Varsayılan olarak 100 yorum
+	}
+	if limit > maxCommentLimit {
+		limit = maxCommentLimit
 	}
 
 	// yt-dlp ile yorumları çek (JSON formatında)
@@ -1054,6 +1090,28 @@ func getVideoComments(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	if req.Compact {
+		compact := make([]CompactComment, 0, len(comments))
+		for _, c := range comments {
+			ts := ""
+			if c.Timestamp != 0 {
+				ts = time.Unix(c.Timestamp, 0).UTC().Format(time.RFC3339)
+			}
+			compact = append(compact, CompactComment{
+				Author:    c.Author,
+				Text:      c.Text,
+				Timestamp: ts,
+			})
+		}
+		json.NewEncoder(w).Encode(CommentCompactResponse{
+			Success:      true,
+			VideoID:      videoData.ID,
+			VideoTitle:   videoData.Title,
+			CommentCount: len(compact),
+			Comments:     compact,
+		})
+		return
+	}
 	json.NewEncoder(w).Encode(CommentResponse{
 		Success:      true,
 		VideoID:      videoData.ID,
