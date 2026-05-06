@@ -1,11 +1,13 @@
-# 🎬 YouTube Downloader API
+# YouTube Downloader REST API (Self‑Hosted)
 
-[![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org)
+[English](README.md) · [Türkçe](README.tr.md)
+
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://golang.org)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker)](https://www.docker.com/)
 [![GitHub Container Registry](https://img.shields.io/badge/ghcr.io-Available-blue?style=flat&logo=github)](https://github.com/users/lutfullahkabalak/packages/container/package/youtube-downloader)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-A fast and simple REST API service for downloading YouTube videos, audio, and subtitles. Built with Go and powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp).
+A self-hosted **YouTube downloader REST API** for downloading **MP4 videos**, **MP3 audio**, and **SRT subtitles** via HTTP endpoints. Built with Go and powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp). Includes channel/playlist listing, URL resolving, and comment extraction.
 
 ## ✨ Features
 
@@ -14,10 +16,18 @@ A fast and simple REST API service for downloading YouTube videos, audio, and su
 - 📝 **Subtitle Download** - Download subtitles in SRT format (supports batch download)
 - 📺 **Channel Listing** - List all videos from a YouTube channel
 - 📋 **Playlist Listing** - List all videos from a YouTube playlist
+- 🔎 **URL Resolve** - Detect whether a URL is a video or playlist (flat metadata)
 - 💬 **Comments** - Retrieve video comments
 - 🐳 **Docker Ready** - Easy deployment with Docker Compose
 - ⚡ **Direct File Response** - Files are streamed directly to client
 - 🧹 **Auto Cleanup** - Downloaded files are automatically removed after serving
+
+## 🔌 API at a glance
+
+- **Downloads**: `POST /download/video`, `GET /download/video/{id}`, `POST /download/audio`, `POST /download/subtitle`
+- **Lists**: `POST /channel/list`, `POST /playlist/list`
+- **Utilities**: `POST /url/resolve`, `POST /video/comments`, `GET /health`
+- **Swagger UI**: `GET /swagger/index.html`
 
 ## 🚀 Quick Start
 
@@ -27,6 +37,8 @@ A fast and simple REST API service for downloading YouTube videos, audio, and su
 docker pull ghcr.io/lutfullahkabalak/youtube-downloader:latest
 docker run -p 3837:3837 ghcr.io/lutfullahkabalak/youtube-downloader:latest
 ```
+
+The API will be available at `http://localhost:3837`
 
 ### Using Docker Compose (local, recommended)
 
@@ -62,7 +74,7 @@ docker run -p 3837:3837 youtube-downloader
 ### Local Development
 
 **Prerequisites:**
-- Go 1.21+
+- Go 1.25+
 - yt-dlp (`pip install yt-dlp`)
 - ffmpeg
 
@@ -373,6 +385,7 @@ curl -X POST http://localhost:3837/download/subtitle \
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
 | `PORT` | `3837` | HTTP server port |
+| `CORS_ORIGIN` | `*` | CORS `Access-Control-Allow-Origin` value |
 
 ```bash
 export PORT=3000
